@@ -1,0 +1,17 @@
+[Desktop Entry]
+Name=Kittyg
+Comment=Git repository browser
+Exec=@binary@ --no-wd %U
+TryExec=@binary@
+Terminal=false
+Type=Application
+# Translators: Do NOT translate or transliterate this text (this is an icon file name)!
+Icon=@icon@
+Categories=GNOME;GTK;Development;RevisionControl;
+MimeType=x-scheme-handler/kittyg;
+#X-GNOME-DocPath=kittyg/kittyg.xml
+Actions=new-window;
+
+[Desktop Action new-window]
+Name=New Window
+Exec=@binary@ --no-wd %U
