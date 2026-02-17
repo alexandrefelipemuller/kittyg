@@ -1,6 +1,6 @@
 subdir('icons')
 
-desktop = 'org.gnome.gitg.desktop'
+desktop = 'org.gnome.kittyg.desktop'
 
 desktop_config = configuration_data()
 desktop_config.set('icon', application_id)
@@ -32,12 +32,12 @@ endif
 schema_conf = configuration_data()
 schema_conf.set('GETTEXT_PACKAGE', gitg_gettext)
 schema_conf.set('APPLICATION_ID', application_id)
-schema_path = '/org/gnome/gitg'
+schema_path = '/org/gnome/kittyg'
 if get_option('profile')  == 'development'
-  schema_path = '/org/gnome/gitgDevel'
+  schema_path = '/org/gnome/kittygDevel'
 endif
 schema_conf.set('SCHEMA_PATH', schema_path)
-schema = 'org.gnome.gitg.gschema.xml'
+schema = 'org.gnome.kittyg.gschema.xml'
 
 configure_file(
   input: schema + '.in',
@@ -47,7 +47,7 @@ configure_file(
   install_dir: join_paths(gitg_datadir, 'glib-2.0', 'schemas'),
 )
 
-metainfo = 'org.gnome.gitg.metainfo.xml'
+metainfo = 'org.gnome.kittyg.metainfo.xml'
 metainfo_config = configuration_data()
 metainfo_config.set('app-id', application_id)
 metainfo_config.set('gettext', gitg_name)
@@ -74,7 +74,7 @@ if appstreamcli.found()
 endif
 
 install_man(
-  'gitg.1',
+  'kittyg.1',
 )
 
 enable_glade_catalog = get_option('glade_catalog')

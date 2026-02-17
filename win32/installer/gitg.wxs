@@ -8,7 +8,7 @@
     <Media Id="1" Cabinet="data.cab" EmbedCab="yes" />
 
     <!-- Features -->
-    <Feature Id="gitg" Title="gitg" Level="1">
+    <Feature Id="gitg" Title="kittyg" Level="1">
       <ComponentGroupRef Id="binaries" />
       <ComponentGroupRef Id="startMenuShortcuts" />
       <ComponentGroupRef Id="contextMenuShortcuts" />
@@ -50,14 +50,14 @@
   <Fragment>
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="$(var.PlatformProgramFilesFolder)" Name="$(var.PlatformProgramFilesFolder)">
-        <Directory Name="gitg" Id="gitg_dir">
+        <Directory Name="kittyg" Id="gitg_dir">
           <Directory Id="INSTALLDIR">
             <Directory Name="license" Id="gitg_license" />
           </Directory>
         </Directory>
       </Directory>
       <Directory Id="ProgramMenuFolder">
-        <Directory Id="ProgramMenuDir" Name="gitg" />
+        <Directory Id="ProgramMenuDir" Name="kittyg" />
       </Directory>
     </Directory>
   </Fragment>
@@ -67,18 +67,18 @@
     <ComponentGroup Id="startMenuShortcuts">
       <Component Id="programShortcuts" Guid="{A071C7AE-C657-4FAD-B0CC-11A6D794D0D3}" Directory="ProgramMenuDir">
         <RegistryValue Key="Software\[Manufacturer]\[ProductName]" Root="HKCU" Type="string" Value="[INSTALLDIR]" Name="InstallPath" />
-        <Shortcut Id="gitgExec" Name="gitg" Description="gitg" Target="[INSTALLDIR]\bin\gitg.exe" />
-        <Shortcut Id="uninstallProduct" Name="Uninstall gitg" Arguments="/x [ProductCode]" Description="Uninstall gitg" Target="[System64Folder]msiexec.exe" />
+        <Shortcut Id="gitgExec" Name="kittyg" Description="kittyg" Target="[INSTALLDIR]\bin\kittyg.exe" />
+        <Shortcut Id="uninstallProduct" Name="Uninstall kittyg" Arguments="/x [ProductCode]" Description="Uninstall kittyg" Target="[System64Folder]msiexec.exe" />
         <RemoveFolder Id="ProgramMenuDir" On="uninstall" />
       </Component>
     </ComponentGroup>
 
     <ComponentGroup Id="contextMenuShortcuts">
       <Component Id="contextShortcuts" Guid="A457CA3A-AA5E-42BA-A3B6-6D650561B565" Directory="INSTALLDIR">
-        <RegistryValue Key="Software\Classes\Directory\Background\shell\gitg" Root="HKCU" Type="string" Value="Gitg Here" />
-        <RegistryValue Key="Software\Classes\Directory\Background\shell\gitg\command" Root="HKCU" Type="string" Value="[INSTALLDIR]bin\gitg.exe" />
-        <RegistryValue Key="Software\Classes\Directory\shell\gitg" Root="HKCU" Type="string" Value="Gitg Here" />
-        <RegistryValue Key="Software\Classes\Directory\shell\gitg\command" Root="HKCU" Type="string" Value="[INSTALLDIR]bin\gitg.exe &quot;&#37;1&quot;" />
+        <RegistryValue Key="Software\Classes\Directory\Background\shell\kittyg" Root="HKCU" Type="string" Value="Kittyg Here" />
+        <RegistryValue Key="Software\Classes\Directory\Background\shell\kittyg\command" Root="HKCU" Type="string" Value="[INSTALLDIR]bin\kittyg.exe" />
+        <RegistryValue Key="Software\Classes\Directory\shell\kittyg" Root="HKCU" Type="string" Value="Kittyg Here" />
+        <RegistryValue Key="Software\Classes\Directory\shell\kittyg\command" Root="HKCU" Type="string" Value="[INSTALLDIR]bin\kittyg.exe &quot;&#37;1&quot;" />
       </Component>
     </ComponentGroup>
 

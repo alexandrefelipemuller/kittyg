@@ -26,6 +26,7 @@ public class Application : Gtk.Application
 	private const string version = Gitg.Config.VERSION;
 
 	private Settings d_state_settings;
+	private GitEnvironment d_git_environment;
 
 	private static bool app_quit = false;
 	private static string activity;
@@ -38,13 +39,13 @@ public class Application : Gtk.Application
 		{"version", 'v', OptionFlags.NO_ARG, OptionArg.CALLBACK,
 		 (void *)show_version_and_quit, N_("Show the application’s version"), null},
 		{"activity", '\0', 0, OptionArg.STRING,
-		 ref activity, N_("Start gitg with a particular activity"), null},
+		 ref activity, N_("Start kittyg with a particular activity"), null},
 		{"commit", 'c', OptionFlags.NO_ARG, OptionArg.CALLBACK,
-		 (void *)commit_activity, N_("Start gitg with the commit activity (shorthand for --activity commit)"), null},
+		 (void *)commit_activity, N_("Start kittyg with the commit activity (shorthand for --activity commit)"), null},
 		{"no-wd", 0, 0, OptionArg.NONE,
 		 ref no_wd, N_("Do not try to load a repository from the current working directory"), null},
 		{"standalone", 0, 0, OptionArg.NONE,
-		 ref standalone, N_("Run gitg in standalone mode"), null},
+		 ref standalone, N_("Run kittyg in standalone mode"), null},
 		{"init", 0, 0, OptionArg.NONE,
 		 ref init, N_("Put paths under git if needed"), null},
 		{null}
@@ -226,7 +227,7 @@ public class Application : Gtk.Application
 		                    "Alberto Fanjul <albfan@gnome.org>"};
 
 		string copyright = "Copyright \xc2\xa9 2012 Jesse van den Kieboom";
-		string comments = _("gitg is a Git repository viewer for GTK+/GNOME");
+		string comments = _("kittyg is a Git repository viewer for GTK+/GNOME");
 
 		unowned List<Gtk.Window> wnds = get_windows();
 
@@ -238,7 +239,7 @@ public class Application : Gtk.Application
 		                      "translator-credits", _("translator-credits"),
 		                      "version", Config.VERSION,
 		                      "website", Config.PACKAGE_URL,
-		                      "website-label", _("gitg homepage"),
+		                      "website-label", _("kittyg homepage"),
 		                      "logo-icon-name", Gitg.Config.APPLICATION_ID,
 		                      "license-type", Gtk.License.GPL_2_0);
 	}
@@ -387,6 +388,7 @@ public class Application : Gtk.Application
 		style_manager.color_scheme = PREFER_LIGHT;
 
 		PlatformSupport.application_support_prepare_startup();
+		d_git_environment = new GitEnvironment();
 
 		try
 		{
@@ -396,7 +398,7 @@ public class Application : Gtk.Application
 		{
 			if (e is Gitg.InitError.THREADS_UNSAFE)
 			{
-				var errmsg = _("We are terribly sorry, but gitg requires libgit2 (a library on which gitg depends) to be compiled with threading support.\n\nIf you manually compiled libgit2, then please configure libgit2 with -DTHREADSAFE:BOOL=ON.\n\nOtherwise, report a bug in your distributions’ bug reporting system for providing libgit2 without threading support.");
+				var errmsg = _("We are terribly sorry, but kittyg requires libgit2 (a library on which kittyg depends) to be compiled with threading support.\n\nIf you manually compiled libgit2, then please configure libgit2 with -DTHREADSAFE:BOOL=ON.\n\nOtherwise, report a bug in your distributions’ bug reporting system for providing libgit2 without threading support.");
 
 				init_error(errmsg);
 				error("%s", errmsg);

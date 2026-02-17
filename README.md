@@ -1,43 +1,65 @@
-# Gitg
+# kittyg
 
-<a href="https://flathub.org/apps/details/org.gnome.gitg"><img height="51" alt="Download on Flathub" src="https://flathub.org/assets/badges/flathub-badge-en.svg"/> </a>
+`kittyg` is a fork of `gitg`, a graphical Git client built with GTK and Vala.
+The project focuses on a fast UI for history browsing, commits, diffs, and common repository operations.
 
-gitg is a graphical user interface for git. It aims at being a small, fast and convenient tool to visualize the history of git repositories.  Besides visualization, gitg also provides several utilities to manage your repository and commit your work.
+## Project status
 
-The latest version of gitg is 44.
+- Based on the upstream `gitg` codebase.
+- Main rebranding to `kittyg` has been applied (app name, desktop/metainfo, manifest/CI, UI text, and primary docs).
+- Some internal APIs still use legacy names (`Gitg`, `libgitg`) to avoid large compatibility breakage.
 
-- Website:      https://gitlab.gnome.org/GNOME/gitg
-- Issues:       https://gitlab.gnome.org/GNOME/gitg/issues
-- Download:     https://download.gnome.org/sources/gitg/
-- Contact:      https://discourse.gnome.org/tag/gitg
-- Translate:    https://l10n.gnome.org/module/gitg/
+## Features
 
-## Installing gitg
+- History view with references (branches/tags/remotes).
+- Commit workflow with staging/unstaging.
+- Reference actions (checkout, merge, push, create branch/tag/patch, etc.).
+- Built-in plugins (`files` and `diff`) and extension support via `libpeas`.
+- Application preferences (interface, history, commit, general).
 
-To install the latest version of gitg, make sure to download gitg-44.tar.xz from the download site. After downloading the following procedure installs gitg:
+## Recent changes in this fork
 
+- New setting in Preferences > General to choose preferred Git client:
+  - `Embedded`
+  - `System`
+- New context menu item in the commit list:
+  - `Copy SHA to clipboard`
+
+## Repository layout
+
+- `gitg/`: main application (UI, activities, actions).
+- `libgitg/`: core library, widgets, and utilities.
+- `libgitg-ext/`: public extension interfaces.
+- `plugins/`: built-in plugins.
+- `data/`: desktop file, schemas, metainfo, manpage, icons, and resources.
+- `tests/`: tests by module.
+- `win32/`, `osx/`: platform packaging.
+
+## Build and run
+
+### Main dependencies
+
+- Meson, Ninja, Vala (`valac`)
+- GTK3, libhandy-1, libgit2-glib, gtksourceview-4, gspell, libpeas, libsecret, gee, json-glib, gobject-introspection
+
+### Commands
+
+```bash
+meson setup build
+ninja -C build
+meson test -C build --print-errorlogs
 ```
-$ tar Jxf gitg-44.tar.xz
-$ cd gitg-44
-$ meson --prefix=/usr build
-$ ninja -C build
-$ sudo ninja -C build install
-```
 
-## Building gitg from git
+## Important environment note
 
-The gitg repository is hosted on gitlab.gnome.org. To build from git:
+This code requires `libgit2-glib >= 1.2.0` (as defined in `meson.build`).
+On Debian 12 (bookworm), the default package may be `1.1.0`, which prevents successful configuration.
 
-```
-$ git clone https://gitlab.gnome.org/GNOME/gitg.git
-$ cd gitg
-$ meson --prefix=/usr build
-$ ninja -C build
-$ sudo ninja -C build install
-```
+## Flatpak and CI
 
-Alternatively you can build using Flatpak with the org.gnome.gitgDevel.json manifest.
+- Development manifest: `org.gnome.kittygDevel.json`
+- GitLab CI uses this manifest and app-id `org.gnome.kittygDevel`.
 
-## Using gitg
+## License
 
-When gitg is installed, you can run gitg from the GNOME menu, or from a terminal by issueing: 'gitg'. Type 'gitg --help' to show the options you can specify on the command line.
+GPL-2.0+ (inherited from the original project).

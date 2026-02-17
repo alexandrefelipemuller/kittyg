@@ -1,15 +1,15 @@
 project(
-  'gitg', ['c', 'vala'],
+  'kittyg', ['c', 'vala'],
   version: '45.alpha',
   license: 'GPL2+',
   default_options: 'buildtype=debugoptimized',
   meson_version: '>= 0.50.0',
 )
-application_id = 'org.gnome.gitg'
+application_id = 'org.gnome.kittyg'
 gitg_name = meson.project_name()
 
 if get_option('profile') == 'development'
-  application_id = 'org.gnome.gitgDevel'
+  application_id = 'org.gnome.kittygDevel'
   gitg_name = meson.project_name() + 'Devel'
 endif
 
@@ -64,7 +64,7 @@ config_h = configuration_data()
 set_defines = [
   # package
   ['PACKAGE_NAME', gitg_name],
-  ['PACKAGE_URL', 'https://wiki.gnome.org/Apps/Gitg'],
+  ['PACKAGE_URL', 'https://gitlab.gnome.org/GNOME/gitg'],
   ['VERSION', gitg_version],
   ['APPLICATION_ID', application_id],
   ['PROFILE', get_option('profile')],
@@ -112,7 +112,7 @@ if gitg_debug
 endif
 
 add_project_arguments(common_flags, language: 'c')
-add_project_arguments(['-DG_LOG_DOMAIN="gitg"'], language: 'c')
+add_project_arguments(['-DG_LOG_DOMAIN="kittyg"'], language: 'c')
 
 # vala compiler flags
 add_project_arguments('--vapidir=' + vapi_dir, language: 'vala')

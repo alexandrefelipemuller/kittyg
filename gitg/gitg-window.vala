@@ -514,7 +514,7 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 
 	private void update_title()
 	{
-		string windowtitle = "gitg";
+		string windowtitle = "kittyg";
 		string title;
 		string? subtitle = null;
 
@@ -527,7 +527,7 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 				var parent_path = Utils.replace_home_dir_with_tilde(workdir.get_parent());
 
 				title = @"$(d_repository.name) ($parent_path)";
-				windowtitle = @"$(d_repository.name) - gitg";
+				windowtitle = @"$(d_repository.name) - kittyg";
 			}
 			else
 			{

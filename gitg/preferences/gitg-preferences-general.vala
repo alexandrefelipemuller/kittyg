@@ -28,6 +28,8 @@ public class PreferencesGeneral : Gtk.Grid, GitgExt.Preferences
 
 	[GtkChild (name = "smart_push")]
 	private unowned Gtk.CheckButton d_smart_push;
+	[GtkChild (name = "git_client")]
+	private unowned Gtk.ComboBoxText d_git_client;
 
 	construct
 	{
@@ -36,6 +38,11 @@ public class PreferencesGeneral : Gtk.Grid, GitgExt.Preferences
 		settings.bind("smart-push",
 		              d_smart_push,
 		              "active",
+		              SettingsBindFlags.GET | SettingsBindFlags.SET);
+
+		settings.bind("git-client",
+		              d_git_client,
+		              "active-id",
 		              SettingsBindFlags.GET | SettingsBindFlags.SET);
 	}
 
