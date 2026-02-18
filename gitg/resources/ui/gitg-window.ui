@@ -92,10 +92,23 @@
               <class name="image-button"/>
             </style>
             <child>
-              <object class="GtkImage" id="search_image">
+              <object class="GtkBox">
                 <property name="visible">True</property>
-                <property name="icon_size">1</property>
-                <property name="icon_name">edit-find-symbolic</property>
+                <property name="orientation">vertical</property>
+                <property name="spacing">2</property>
+                <child>
+                  <object class="GtkImage" id="search_image">
+                    <property name="visible">True</property>
+                    <property name="icon_size">1</property>
+                    <property name="icon_name">edit-find-symbolic</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="visible">True</property>
+                    <property name="label" translatable="yes">Search</property>
+                  </object>
+                </child>
               </object>
             </child>
           </object>
@@ -136,10 +149,23 @@
               <class name="image-button"/>
             </style>
             <child>
-              <object class="GtkImage" id="gear_image">
+              <object class="GtkBox">
                 <property name="visible">True</property>
-                <property name="icon_size">1</property>
-                <property name="icon_name">open-menu-symbolic</property>
+                <property name="orientation">vertical</property>
+                <property name="spacing">2</property>
+                <child>
+                  <object class="GtkImage" id="gear_image">
+                    <property name="visible">True</property>
+                    <property name="icon_size">1</property>
+                    <property name="icon_name">open-menu-symbolic</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="visible">True</property>
+                    <property name="label" translatable="yes">Settings</property>
+                  </object>
+                </child>
               </object>
             </child>
           </object>

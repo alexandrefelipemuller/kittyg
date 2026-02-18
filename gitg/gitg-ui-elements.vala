@@ -196,7 +196,7 @@ public class UIElements<T> : Object
 
 		d_stack.add_with_properties(e.widget,
 		                            "name", e.id,
-		                            "title", e.description,
+		                            "title", e.display_name,
 		                            "icon-name", e.icon,
 		                            "position", insert_position);
 	}
