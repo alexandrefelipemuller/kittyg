@@ -309,6 +309,121 @@ public class Remote : Ggit.Remote
 		reset_transfer_progress(true);
 	}
 
+	private bool use_system_git_client()
+	{
+		try
+		{
+			var settings = new Settings(Gitg.Config.APPLICATION_ID + ".preferences.general");
+			return settings.get_string("git-client") == "system";
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private void emit_push_output(Ggit.RemoteCallbacks? callbacks, string? output)
+	{
+		if (callbacks == null || output == null || output == "")
+		{
+			return;
+		}
+
+		foreach (var line in output.split("\n"))
+		{
+			var msg = line.strip();
+
+			if (msg != "")
+			{
+				callbacks.progress(msg);
+			}
+		}
+	}
+
+	private async void push_to_system_git(bool                  force,
+	                                      string                local_ref,
+	                                      string                remote_ref,
+	                                      Ggit.RemoteCallbacks? callbacks) throws Error
+	{
+		var owner = get_owner();
+
+		if (owner == null)
+		{
+			throw new IOError.FAILED(_("Failed to determine repository for push"));
+		}
+
+		var cwd_file = owner.get_workdir();
+
+		if (cwd_file == null)
+		{
+			cwd_file = owner.get_location();
+		}
+
+		if (cwd_file == null || cwd_file.get_path() == null)
+		{
+			throw new IOError.FAILED(_("Failed to determine working directory for push"));
+		}
+
+		var remote_target = get_name();
+
+		if (remote_target == null || remote_target == "")
+		{
+			remote_target = get_url();
+		}
+
+		if (remote_target == null || remote_target == "")
+		{
+			throw new IOError.FAILED(_("Failed to determine remote for push"));
+		}
+
+		var refspec = @"$local_ref:$remote_ref";
+		string[] argv;
+
+		if (force)
+		{
+			argv = {"git", "push", "--progress", "--porcelain", "--force", remote_target, refspec};
+		}
+		else
+		{
+			argv = {"git", "push", "--progress", "--porcelain", remote_target, refspec};
+		}
+
+		string? stdout_data = null;
+		string? stderr_data = null;
+		int exit_status = 0;
+
+		yield Async.thread(() => {
+			Process.spawn_sync(cwd_file.get_path(),
+			                   argv,
+			                   null,
+			                   SpawnFlags.SEARCH_PATH,
+			                   null,
+			                   out stdout_data,
+			                   out stderr_data,
+			                   out exit_status);
+		});
+
+		emit_push_output(callbacks, stdout_data);
+		emit_push_output(callbacks, stderr_data);
+
+		if (exit_status != 0)
+		{
+			var msg = (stderr_data ?? "").strip();
+
+			if (msg == "")
+			{
+				msg = (stdout_data ?? "").strip();
+			}
+
+			if (msg == "")
+			{
+				msg = _("git push failed with exit code %d").printf(exit_status);
+			}
+
+			throw new IOError.FAILED(msg);
+		}
+	}
+
 	private async void push_to(bool force, string local_ref, string remote_ref, Ggit.RemoteCallbacks? callbacks) throws Error
 	{
 		state = RemoteState.TRANSFERRING;
@@ -316,20 +431,27 @@ public class Remote : Ggit.Remote
 
 		try
 		{
-			yield Async.thread(() => {
-				var options = new Ggit.PushOptions();
-				if (d_callbacks == null) {
-					d_callbacks = new Callbacks(this, callbacks, update_transfer_progress);
-				}
+			if (use_system_git_client())
+			{
+				yield push_to_system_git(force, local_ref, remote_ref, callbacks);
+			}
+			else
+			{
+				yield Async.thread(() => {
+					var options = new Ggit.PushOptions();
+					if (d_callbacks == null) {
+						d_callbacks = new Callbacks(this, callbacks, update_transfer_progress);
+					}
 
-				options.set_remote_callbacks(d_callbacks);
+					options.set_remote_callbacks(d_callbacks);
 
-				var forcemark = force ? "+": "";
-				string [] push_refs = { @"$forcemark$local_ref:$remote_ref" };
+					var forcemark = force ? "+": "";
+					string [] push_refs = { @"$forcemark$local_ref:$remote_ref" };
 
-				if (!base.push(push_refs, options))
-				  throw new Error(0,0,"push");
-			});
+					if (!base.push(push_refs, options))
+					  throw new Error(0,0,"push");
+				});
+			}
 		}
 		catch (Error e)
 		{

@@ -87,29 +87,51 @@ class CommitActionPush : GitgExt.UIElement, GitgExt.Action, GitgExt.CommitAction
 	class PushCallbacks:Ggit.RemoteCallbacks {
 		public GitgExt.Application? application { owned get; construct set; }
 
-		public ResultDialog push_dlg;
+		private ResultDialog? push_dlg;
+		private bool closed_by_user;
 
 		public PushCallbacks(GitgExt.Application application)
 		{
 			Object(application: application);
 			push_dlg = new ResultDialog((Gtk.Window)application, _("Push Output"));
 			push_dlg.response.connect((d, resp) => {
-				push_dlg.destroy();
+				closed_by_user = true;
+				push_dlg = null;
 			});
 		}
 
-		public override void progress(string message) {
-			if (message == "")
+		private void show_message(string message)
+		{
+			if (message == "" || closed_by_user)
+			{
 				return;
-
-			push_dlg.append_message(message);
-
-			if (!push_dlg.is_visible()) {
-				Idle.add(() => {
-					push_dlg.show();
-					return false;
-				});
 			}
+
+			Idle.add(() => {
+				if (closed_by_user || push_dlg == null)
+				{
+					return false;
+				}
+
+				push_dlg.append_message(message);
+
+				if (!push_dlg.is_visible())
+				{
+					push_dlg.show();
+				}
+
+				return false;
+			});
+		}
+
+		public void show_error(string message)
+		{
+			show_message(message);
+		}
+
+		public override void progress(string message)
+		{
+			show_message(message);
 		}
 	}
 
@@ -119,15 +141,20 @@ class CommitActionPush : GitgExt.UIElement, GitgExt.Action, GitgExt.CommitAction
 		application.notifications.add(notification);
 
 		notification.text = _("Pushing to “%s”").printf(remote.get_url());
-
+		var callbacks = new PushCallbacks(application);
 		try
 		{
-			yield remote.push(force, local_branch, remote_branch, new PushCallbacks(application));
+			yield remote.push(force, local_branch, remote_branch, callbacks);
 			((Gtk.ApplicationWindow)application).activate_action("reload", null);
 		}
 		catch (Error e)
 		{
-			notification.error(_("Failed to push to “%s”: %s").printf(remote.get_url(), e.message));
+			var url = Markup.escape_text(remote.get_url(), -1);
+			var message = Markup.escape_text(e.message, -1);
+
+			notification.error(_("Failed to push to “%s”: %s").printf(url, message));
+			callbacks.show_error(_("Push failed: %s").printf(e.message));
+			application.show_infobar(_("Failed to push"), e.message, Gtk.MessageType.ERROR);
 			stderr.printf("Failed to push: %s\n", e.message);
 
 			return false;
