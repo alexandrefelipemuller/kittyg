@@ -4,6 +4,6 @@ install_data(
 )
 
 install_data(
-  'org.gnome.gitg-symbolic.svg',
+  '@0@-symbolic.svg'.format(application_id),
   install_dir: join_paths(gitg_datadir, 'icons', 'hicolor', 'scalable', 'apps'),
 )

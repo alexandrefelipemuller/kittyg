@@ -3,11 +3,11 @@ include: 'https://gitlab.gnome.org/GNOME/citemplates/raw/master/flatpak/flatpak_
 flatpak:
   extends: '.flatpak'
   variables:
-    MANIFEST_PATH: "org.gnome.gitgDevel.json"
+    MANIFEST_PATH: "org.gnome.kittygDevel.json"
     RUNTIME_REPO: "https://nightly.gnome.org/gnome-nightly.flatpakrepo"
-    FLATPAK_MODULE: "gitg"
-    APP_ID: "org.gnome.gitgDevel"
-    BUNDLE: "gitg-git.flatpak"
+    FLATPAK_MODULE: "kittyg"
+    APP_ID: "org.gnome.kittygDevel"
+    BUNDLE: "kittyg-git.flatpak"
 
 
 nightly:

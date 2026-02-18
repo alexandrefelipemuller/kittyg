@@ -1,9 +1,9 @@
 {
-    "app-id": "org.gnome.gitgDevel",
+    "app-id": "org.gnome.kittygDevel",
     "runtime": "org.gnome.Platform",
     "runtime-version": "master",
     "sdk": "org.gnome.Sdk",
-    "command": "gitgDevel",
+    "command": "kittygDevel",
     "tags": [
         "nightly"
     ],
@@ -164,7 +164,7 @@
             ]
         },
         {
-            "name": "gitg",
+            "name": "kittyg",
             "buildsystem": "meson",
             "builddir": true,
             "config-opts": [

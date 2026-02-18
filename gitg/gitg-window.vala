@@ -314,6 +314,59 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 		search_move(false);
 	}
 
+	private void update_activity_switcher_layout()
+	{
+		Idle.add(() => {
+			var activities = d_activities.get_available_elements();
+			int idx = 0;
+
+			foreach (var child in d_activities_switcher.get_children())
+			{
+				var button = child as Gtk.Button;
+
+				if (button == null)
+				{
+					idx++;
+					continue;
+				}
+
+				var old_child = button.get_child();
+
+				if (old_child != null)
+				{
+					button.remove(old_child);
+				}
+
+				var box = new Gtk.Box(Gtk.Orientation.VERTICAL, 2);
+
+				if (idx < activities.length)
+				{
+					var activity = activities[idx] as GitgExt.Activity;
+
+					if (activity != null)
+					{
+						var icon_name = activity.icon;
+
+						if (icon_name != null)
+						{
+							var image = new Gtk.Image.from_icon_name(icon_name, Gtk.IconSize.BUTTON);
+							box.pack_start(image, false, false, 0);
+						}
+
+						var label = new Gtk.Label(activity.display_name);
+						box.pack_start(label, false, false, 0);
+					}
+				}
+
+				button.add(box);
+				box.show_all();
+				idx++;
+			}
+
+			return false;
+		});
+	}
+
 	construct
 	{
 		if (Gitg.PlatformSupport.use_native_window_controls())
@@ -366,6 +419,7 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 		                              BindingFlags.BIDIRECTIONAL);
 
 		d_activities_switcher.set_stack(d_stack_activities);
+		update_activity_switcher_layout();
 
 		d_environment = new Gee.HashMap<string, string>();
 
@@ -514,7 +568,7 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 
 	private void update_title()
 	{
-		string windowtitle = "gitg";
+		string windowtitle = "kittyg";
 		string title;
 		string? subtitle = null;
 
@@ -527,7 +581,7 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 				var parent_path = Utils.replace_home_dir_with_tilde(workdir.get_parent());
 
 				title = @"$(d_repository.name) ($parent_path)";
-				windowtitle = @"$(d_repository.name) - gitg";
+				windowtitle = @"$(d_repository.name) - kittyg";
 			}
 			else
 			{
@@ -641,6 +695,7 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 		}
 
 		d_activities.update();
+		update_activity_switcher_layout();
 
 		if (d_repository != null)
 		{

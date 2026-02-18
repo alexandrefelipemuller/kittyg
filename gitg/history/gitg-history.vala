@@ -248,6 +248,11 @@ namespace GitgHistory
 
 		private void on_commit_model_started(Gitg.CommitModel model)
 		{
+			if (d_main != null)
+			{
+				d_main.history_loading = true;
+			}
+
 			if (d_insertsig == 0)
 			{
 				d_insertsig = d_commit_list_model.row_inserted.connect(on_row_inserted_select);
@@ -320,6 +325,11 @@ namespace GitgHistory
 
 		private void on_commit_model_finished(Gitg.CommitModel model)
 		{
+			if (d_main != null)
+			{
+				d_main.history_loading = false;
+			}
+
 			if (d_insertsig != 0)
 			{
 				d_commit_list_model.disconnect(d_insertsig);
@@ -814,11 +824,6 @@ namespace GitgHistory
 				add_commit_action(actions, extension as GitgExt.CommitAction);
 			});
 
-			if (actions.size == 0)
-			{
-				return null;
-			}
-
 			Gtk.Menu menu = new Gtk.Menu();
 
 			foreach (var ac in actions)
@@ -860,6 +865,27 @@ namespace GitgHistory
 			                                    }
 			                              );
 			});
+
+			if (menu.get_children().length() > 0)
+			{
+				var sep = new Gtk.SeparatorMenuItem();
+				sep.show();
+				menu.append(sep);
+			}
+
+			var copy_sha = new Gtk.MenuItem.with_mnemonic(_("_Copy SHA to clipboard"));
+			copy_sha.show();
+			copy_sha.activate.connect(() => {
+				var sha = commit.get_id().to_string();
+
+				var clip = ((Gtk.Widget)application).get_clipboard(Gdk.SELECTION_CLIPBOARD);
+				clip.set_text(sha, -1);
+
+				clip = ((Gtk.Widget)application).get_clipboard(Gdk.SELECTION_PRIMARY);
+				clip.set_text(sha, -1);
+			});
+			menu.append(copy_sha);
+
 			return menu;
 		}
 
@@ -1208,6 +1234,12 @@ namespace GitgHistory
 
 		private void update_walker()
 		{
+			if (d_main != null)
+			{
+				// Ensure loading state is reset if reload short-circuits (e.g. no selection).
+				d_main.history_loading = false;
+			}
+
 			d_selected.clear();
 
 			var include = new Gee.HashSet<Ggit.OId>((Gee.HashDataFunc)Ggit.OId.hash,

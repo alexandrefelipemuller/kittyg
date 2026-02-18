@@ -46,7 +46,7 @@
       <default>"history"</default>
       <summary>Default Activity</summary>
       <description>
-        The activity which gitg activates by default when first launched.
+        The activity which kittyg activates by default when first launched.
       </description>
     </key>
     <key name="use-default-font" type="b">
@@ -99,6 +99,14 @@
       <description>
         Setting that indicates whether push dialog is configured figuring out
         expected values to push.
+      </description>
+    </key>
+    <key name="git-client" type="s">
+      <default>"embedded"</default>
+      <summary>Git Client Source</summary>
+      <description>
+        Select which Git executable should be preferred for spawned commands.
+        Allowed values are “embedded” and “system”.
       </description>
     </key>
   </schema>

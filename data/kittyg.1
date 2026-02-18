@@ -1,14 +1,14 @@
-.TH GITG "1" "December 2018" "gitg" "User Commands"
+.TH KITTYG "1" "December 2018" "kittyg" "User Commands"
 .SH NAME
-gitg \- Git repository viewer
+kittyg \- Git repository viewer
 .SH SYNOPSIS
-.B gitg
+.B kittyg
 [\fI\,OPTION\/\fR]... [\fI\,REPOSITORY\/\fR]...
 .SH DESCRIPTION
-.B gitg
+.B kittyg
 is a graphical user interface for git. It aims at being a small,
 fast and convenient tool to visualize the history of git repositories.
-Besides visualization, gitg also provides several utilities to manage your
+Besides visualization, kittyg also provides several utilities to manage your
 repository and commit your work.
 .SH OPTIONS
 Help Options:
@@ -28,16 +28,16 @@ Application Options:
 Show the application?s version
 .TP
 \fB\-\-activity\fR
-Start gitg with a particular activity
+Start kittyg with a particular activity
 .TP
 \fB\-c\fR, \fB\-\-commit\fR
-Start gitg with the commit activity (shorthand for \fB\-\-activity\fR commit)
+Start kittyg with the commit activity (shorthand for \fB\-\-activity\fR commit)
 .TP
 \fB\-\-no\-wd\fR
 Do not try to load a repository from the current working directory
 .TP
 \fB\-\-standalone\fR
-Run gitg in standalone mode
+Run kittyg in standalone mode
 .TP
 \fB\-\-display\fR=\fI\,DISPLAY\/\fR
 X display to use
@@ -57,14 +57,14 @@ Select all tags by default in the history activity
 \fB\-s\fR, \fB\-\-select\-reference\fR=\fI\,REFERENCE\/\fR
 Select the specified reference by default in the history activity
 .PP
-.B gitg
+.B kittyg
 will try to load any REPOSITORY passed as command line argument (multiple paths can be passed).
 .PP
 If no repository is specified,
-.B gitg
+.B kittyg
 will try to open the repository specified by the \fBGIT_DIR\fR environment variable;
 if \fBGIT_DIR\fR is not set
-.B gitg
+.B kittyg
 will try to open the repository at the current working directory.
 .SH ENVIRONMENT VARIABLES
 \fBGIT_DIR\fR

@@ -4,12 +4,12 @@
          xmlns:foaf="http://xmlns.com/foaf/0.1/"
          xmlns:gnome="http://api.gnome.org/doap-extensions#"
          xmlns="http://usefulinc.com/ns/doap#">
-  <name xml:lang="en">Gitg</name>
+  <name xml:lang="en">Kittyg</name>
   <shortdesc xml:lang="en">git repository viewer for GTK+/GNOME</shortdesc>
-  <description>gitg is a graphical user interface for git. It aims at being a small,
+  <description>kittyg is a graphical user interface for git. It aims at being a small,
   fast and convenient tool to visualize the history of git repositories.
-  Besides visualization, gitg also provides several utilities to manage your
-  repository and commit your work.</description>
+  Besides visualization, kittyg also provides several utilities to manage your
+  repository and commit your work. kittyg is forked from gitg.</description>
 
   <homepage rdf:resource="https://wiki.gnome.org/Apps/Gitg" />
   <support-forum rdf:resource="https://discourse.gnome.org/tag/gitg" />
@@ -44,4 +44,3 @@
   </maintainer>
 
 </Project>
-

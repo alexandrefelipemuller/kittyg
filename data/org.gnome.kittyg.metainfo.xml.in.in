@@ -2,17 +2,20 @@
 <!-- Copyright 2019 Alberto Fanjul <albfan@gnome.org> -->
 <component type="desktop-application">
   <id>@app-id@</id>
-  <name>gitg</name>
+  <name>kittyg</name>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-2.0+</project_license>
   <project_group>GNOME</project_group>
   <summary>Graphical user interface for git</summary>
   <description>
     <p>
-      Gitg is a graphical user interface for git. It aims at being a small,
+      Kittyg is a graphical user interface for git. It aims at being a small,
       fast and convenient tool to visualize the history of git repositories.
-      Besides visualization, gitg also provides several utilities to manage your
+      Besides visualization, kittyg also provides several utilities to manage your
       repository and commit your work.
+    </p>
+    <p>
+      kittyg is forked from gitg.
     </p>
     <p>Goals:</p>
     <ul>
@@ -213,7 +216,7 @@
   <update_contact>albfan@gnome.org</update_contact>
   <translation type="gettext">@gettext@</translation>
   <content_rating type="oars-1.1" />
-  <developer_name>The Gitg Team</developer_name>
+  <developer_name>The Kittyg Team</developer_name>
   <url type="homepage">https://wiki.gnome.org/Apps/Gitg</url>
   <url type="bugtracker">https://gitlab.gnome.org/GNOME/gitg/issues</url>
   <url type="contact">https://discourse.gnome.org/tag/gitg</url>
@@ -221,4 +224,3 @@
   <url type="vcs-browser">https://gitlab.gnome.org/GNOME/gitg</url>
   <url type="translate">https://l10n.gnome.org/module/gitg/</url>
 </component>
-

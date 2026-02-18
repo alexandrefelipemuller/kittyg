@@ -82,91 +82,137 @@
             <property name="can_focus">True</property>
             <property name="shadow-type">none</property>
             <child>
-              <object class="GitgCommitListView" id="d_commit_list_view">
+              <object class="GtkOverlay">
                 <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="has_focus">True</property>
-                <property name="fixed-height-mode">True</property>
-                <property name="headers-visible">False</property>
-                <property name="enable-search">False</property>
                 <child>
-                  <object class="GtkTreeViewColumn" id="column_commit_list_subject">
-                    <property name="title" translatable="yes">Subject</property>
-                    <property name="sizing">fixed</property>
-                    <property name="resizable">True</property>
-                    <property name="expand">True</property>
-                    <property name="fixed-width">400</property>
+                  <object class="GitgCommitListView" id="d_commit_list_view">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="has_focus">True</property>
+                    <property name="fixed-height-mode">True</property>
+                    <property name="headers-visible">False</property>
+                    <property name="enable-search">False</property>
                     <child>
-                      <object class="GitgCellRendererLanes" id="renderer_commit_list_subject">
-                        <property name="ellipsize">end</property>
+                      <object class="GtkTreeViewColumn" id="column_commit_list_subject">
+                        <property name="title" translatable="yes">Subject</property>
+                        <property name="sizing">fixed</property>
+                        <property name="resizable">True</property>
+                        <property name="expand">True</property>
+                        <property name="fixed-width">400</property>
+                        <child>
+                          <object class="GitgCellRendererLanes" id="renderer_commit_list_subject">
+                            <property name="ellipsize">end</property>
+                          </object>
+                          <attributes>
+                            <attribute name="text">1</attribute>
+                          </attributes>
+                        </child>
                       </object>
-                      <attributes>
-                        <attribute name="text">1</attribute>
-                      </attributes>
+                    </child>
+                    <child>
+                      <object class="GtkTreeViewColumn" id="column_commit_list_author">
+                        <property name="title" translatable="yes">Author</property>
+                        <property name="sizing">fixed</property>
+                        <property name="resizable">True</property>
+                        <property name="fixed-width">180</property>
+                        <child>
+                          <object class="GtkCellRendererText" id="renderer_commit_list_author">
+                            <property name="ellipsize">end</property>
+                          </object>
+                          <attributes>
+                            <attribute name="text">4</attribute>
+                          </attributes>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkTreeViewColumn" id="column_commit_list_committer_name">
+                        <property name="title" translatable="yes">Committer</property>
+                        <property name="sizing">fixed</property>
+                        <property name="resizable">True</property>
+                        <property name="fixed-width">180</property>
+                        <child>
+                          <object class="GtkCellRendererText" id="renderer_commit_list_commiter_name">
+                            <property name="ellipsize">end</property>
+                          </object>
+                          <attributes>
+                            <attribute name="text">8</attribute>
+                          </attributes>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkTreeViewColumn" id="column_commit_list_sha1">
+                        <property name="title" translatable="yes">SHA1</property>
+                        <property name="sizing">fixed</property>
+                        <property name="resizable">True</property>
+                        <property name="fixed-width">180</property>
+                        <child>
+                          <object class="GtkCellRendererText" id="renderer_commit_list_sha1">
+                            <property name="ellipsize">end</property>
+                          </object>
+                          <attributes>
+                            <attribute name="text">0</attribute>
+                          </attributes>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkTreeViewColumn" id="column_commit_list_author_date">
+                        <property name="title" translatable="yes">Date</property>
+                        <property name="sizing">fixed</property>
+                        <property name="resizable">True</property>
+                        <property name="fixed-width">150</property>
+                        <child>
+                          <object class="GtkCellRendererText" id="renderer_commit_list_author_date">
+                            <property name="ellipsize">end</property>
+                          </object>
+                          <attributes>
+                            <attribute name="text">6</attribute>
+                          </attributes>
+                        </child>
+                      </object>
                     </child>
                   </object>
                 </child>
-                <child>
-                  <object class="GtkTreeViewColumn" id="column_commit_list_author">
-                    <property name="title" translatable="yes">Author</property>
-                    <property name="sizing">fixed</property>
-                    <property name="resizable">True</property>
-                    <property name="fixed-width">180</property>
+                <child type="overlay">
+                  <object class="GtkRevealer" id="d_history_loading_revealer">
+                    <property name="visible">True</property>
+                    <property name="reveal_child">False</property>
+                    <property name="transition_type">crossfade</property>
+                    <property name="halign">start</property>
+                    <property name="valign">start</property>
+                    <property name="margin_start">8</property>
+                    <property name="margin_top">8</property>
                     <child>
-                      <object class="GtkCellRendererText" id="renderer_commit_list_author">
-                        <property name="ellipsize">end</property>
+                      <object class="GtkFrame">
+                        <property name="visible">True</property>
+                        <property name="shadow_type">out</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="visible">True</property>
+                            <property name="orientation">horizontal</property>
+                            <property name="spacing">6</property>
+                            <property name="margin_start">8</property>
+                            <property name="margin_end">8</property>
+                            <property name="margin_top">6</property>
+                            <property name="margin_bottom">6</property>
+                            <child>
+                              <object class="GtkSpinner" id="d_history_loading_spinner">
+                                <property name="visible">True</property>
+                                <property name="active">False</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="visible">True</property>
+                                <property name="xalign">0</property>
+                                <property name="label" translatable="yes">Loading history...</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
                       </object>
-                      <attributes>
-                        <attribute name="text">4</attribute>
-                      </attributes>
-                    </child>
-                  </object>
-                </child>
-                <child>
-                  <object class="GtkTreeViewColumn" id="column_commit_list_committer_name">
-                    <property name="title" translatable="yes">Committer</property>
-                    <property name="sizing">fixed</property>
-                    <property name="resizable">True</property>
-                    <property name="fixed-width">180</property>
-                    <child>
-                      <object class="GtkCellRendererText" id="renderer_commit_list_commiter_name">
-                        <property name="ellipsize">end</property>
-                      </object>
-                      <attributes>
-                        <attribute name="text">8</attribute>
-                      </attributes>
-                    </child>
-                  </object>
-                </child>
-                <child>
-                  <object class="GtkTreeViewColumn" id="column_commit_list_sha1">
-                    <property name="title" translatable="yes">SHA1</property>
-                    <property name="sizing">fixed</property>
-                    <property name="resizable">True</property>
-                    <property name="fixed-width">180</property>
-                    <child>
-                      <object class="GtkCellRendererText" id="renderer_commit_list_sha1">
-                        <property name="ellipsize">end</property>
-                      </object>
-                      <attributes>
-                        <attribute name="text">0</attribute>
-                      </attributes>
-                    </child>
-                  </object>
-                </child>
-                <child>
-                  <object class="GtkTreeViewColumn" id="column_commit_list_author_date">
-                    <property name="title" translatable="yes">Date</property>
-                    <property name="sizing">fixed</property>
-                    <property name="resizable">True</property>
-                    <property name="fixed-width">150</property>
-                    <child>
-                      <object class="GtkCellRendererText" id="renderer_commit_list_author_date">
-                        <property name="ellipsize">end</property>
-                      </object>
-                      <attributes>
-                        <attribute name="text">6</attribute>
-                      </attributes>
                     </child>
                   </object>
                 </child>
