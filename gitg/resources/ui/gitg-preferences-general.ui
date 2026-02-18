@@ -38,7 +38,6 @@
             <property name="can_focus">False</property>
             <property name="margin_start">12</property>
             <property name="hexpand">True</property>
-            <property name="vexpand">True</property>
             <child>
               <object class="GtkCheckButton" id="smart_push">
                 <property name="label" translatable="yes">Smart Push. Figure out parameters for push action</property>

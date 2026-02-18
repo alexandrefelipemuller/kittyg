@@ -53,6 +53,12 @@ class Paned : Gtk.Paned
 	[GtkChild (name = "commit_files_search_entry")]
 	private unowned Gtk.SearchEntry d_files_search_entry;
 
+	[GtkChild (name = "status_loading_revealer")]
+	private unowned Gtk.Revealer d_status_loading_revealer;
+
+	[GtkChild (name = "status_loading_spinner")]
+	private unowned Gtk.Spinner d_status_loading_spinner;
+
 	public Sidebar sidebar
 	{
 		get { return d_tree_view_files; }
@@ -99,6 +105,28 @@ class Paned : Gtk.Paned
 
 	public Gtk.SearchEntry commit_files_search_entry {
 		get { return d_files_search_entry; }
+	}
+
+	public bool status_loading
+	{
+		get
+		{
+			return d_status_loading_revealer.reveal_child;
+		}
+
+		set
+		{
+			d_status_loading_revealer.reveal_child = value;
+
+			if (value)
+			{
+				d_status_loading_spinner.start();
+			}
+			else
+			{
+				d_status_loading_spinner.stop();
+			}
+		}
 	}
 
 	construct

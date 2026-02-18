@@ -248,6 +248,11 @@ namespace GitgHistory
 
 		private void on_commit_model_started(Gitg.CommitModel model)
 		{
+			if (d_main != null)
+			{
+				d_main.history_loading = true;
+			}
+
 			if (d_insertsig == 0)
 			{
 				d_insertsig = d_commit_list_model.row_inserted.connect(on_row_inserted_select);
@@ -320,6 +325,11 @@ namespace GitgHistory
 
 		private void on_commit_model_finished(Gitg.CommitModel model)
 		{
+			if (d_main != null)
+			{
+				d_main.history_loading = false;
+			}
+
 			if (d_insertsig != 0)
 			{
 				d_commit_list_model.disconnect(d_insertsig);
@@ -1224,6 +1234,12 @@ namespace GitgHistory
 
 		private void update_walker()
 		{
+			if (d_main != null)
+			{
+				// Ensure loading state is reset if reload short-circuits (e.g. no selection).
+				d_main.history_loading = false;
+			}
+
 			d_selected.clear();
 
 			var include = new Gee.HashSet<Ggit.OId>((Gee.HashDataFunc)Ggit.OId.hash,

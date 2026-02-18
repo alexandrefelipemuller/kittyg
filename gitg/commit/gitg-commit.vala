@@ -29,6 +29,8 @@ namespace GitgCommit
 		private ulong d_externally_changed_id;
 		private bool d_ignore_external_changes;
 		private Gitg.WhenMapped? d_reload_when_mapped;
+		private Gitg.StageStatusEnumerator? d_status_enumerator;
+		private uint d_reload_serial;
 
 		private enum UiType
 		{
@@ -82,6 +84,12 @@ namespace GitgCommit
 
 		public override void dispose()
 		{
+			if (d_status_enumerator != null)
+			{
+				d_status_enumerator.cancel();
+				d_status_enumerator = null;
+			}
+
 			if (d_externally_changed_id != 0)
 			{
 				application.disconnect(d_externally_changed_id);
@@ -730,26 +738,31 @@ namespace GitgCommit
 			});
 		}
 
-		private Sidebar.Item[] append_items(Gitg.SidebarStore      model,
-		                                    Gitg.StageStatusItem[] items,
-		                                    Sidebar.Item.Type      type,
-		                                    Gee.HashSet<string>?   selected_paths,
-		                                    StageUnstageCallback?  callback)
+		private async void yield_main_loop()
+		{
+			Idle.add(yield_main_loop.callback);
+			yield;
+		}
+
+		private async Sidebar.Item[] append_items(Gitg.SidebarStore      model,
+		                                          Gitg.StageStatusItem[] items,
+		                                          Sidebar.Item.Type      type,
+		                                          Gee.HashSet<string>?   selected_paths,
+		                                          StageUnstageCallback?  callback,
+		                                          uint                   reload_serial)
 		{
 			var ret = new Sidebar.Item[0];
-
-			var sorted = new Gee.ArrayList<Gitg.StageStatusItem>.wrap(items);
-
-			sorted.sort((a, b) => {
-				return a.path.casefold().collate(b.path.casefold());
-			});
-
 			string filter_filename_text = d_main.commit_files_search_entry.text;
+			int processed = 0;
 
-			foreach (var item in sorted)
+			foreach (var item in items)
 			{
-				var sitem = new Sidebar.Item(item, type);
+				if (reload_serial != d_reload_serial)
+				{
+					return ret;
+				}
 
+				var sitem = new Sidebar.Item(item, type);
 				bool filter_passed = filter_filename_text in item.path;
 
 				if (selected_paths != null && selected_paths.contains(item.path) && filter_passed)
@@ -762,9 +775,331 @@ namespace GitgCommit
 				});
 
 				if (filter_passed) model.append(sitem);
+
+				processed++;
+				if (processed % 200 == 0)
+				{
+					yield yield_main_loop();
+				}
 			}
 
 			return ret;
+		}
+
+		private async void populate_sidebar(uint                         reload_serial,
+		                                    Gitg.SidebarStore            model,
+		                                    owned Gitg.StageStatusItem[] items,
+		                                    owned Gee.HashSet<string>    selected_paths,
+		                                    Sidebar.Item.Type            selected_type)
+		{
+			var staged = new Gitg.StageStatusItem[items.length];
+			staged.length = 0;
+
+			var unstaged = new Gitg.StageStatusItem[items.length];
+			unstaged.length = 0;
+
+			var untracked = new Gitg.StageStatusItem[items.length];
+			untracked.length = 0;
+
+			var dirty = new Gitg.StageStatusItem[items.length];
+			dirty.length = 0;
+
+			bool hassub = false;
+			int processed = 0;
+
+			foreach (var item in items)
+			{
+				if (reload_serial != d_reload_serial)
+				{
+					return;
+				}
+
+				if (item.is_staged)
+				{
+					staged += item;
+				}
+
+				if (item.is_unstaged)
+				{
+					unstaged += item;
+				}
+
+				if (item.is_untracked)
+				{
+					untracked += item;
+				}
+
+				var sub = item as Gitg.StageStatusSubmodule;
+
+				if (sub != null)
+				{
+					hassub = true;
+
+					if (sub.is_dirty)
+					{
+						dirty += item;
+					}
+				}
+
+				processed++;
+				if (processed % 500 == 0)
+				{
+					yield yield_main_loop();
+				}
+			}
+
+			if (reload_serial != d_reload_serial)
+			{
+				return;
+			}
+
+			model.clear();
+			d_main.diff_view.diff = null;
+
+			var current_staged = new Sidebar.Item[0];
+			var current_unstaged = new Sidebar.Item[0];
+			var current_untracked = new Sidebar.Item[0];
+			var current_submodules = new Sidebar.Item[0];
+
+			// Populate staged items
+			var staged_header = model.begin_header(_("Staged"), (uint)Sidebar.Item.Type.STAGED);
+
+			staged_header.activated.connect((numclick) => {
+				on_unstage_selected_items();
+			});
+
+			if (staged.length == 0)
+			{
+				model.append_dummy(_("No staged files"));
+			}
+			else
+			{
+				current_staged = yield append_items(model,
+				                                    staged,
+				                                    Sidebar.Item.Type.STAGED,
+				                                    selected_paths,
+				                                    (item) => {
+					if (d_main.sidebar.is_selected(item))
+					{
+						on_unstage_selected_items();
+					}
+					else
+					{
+						on_staged_activated(new Gitg.StageStatusItem[] {item.item});
+					}
+				}, reload_serial);
+			}
+
+			model.end_header();
+			yield yield_main_loop();
+
+			if (reload_serial != d_reload_serial)
+			{
+				return;
+			}
+
+			// Populate unstaged items
+			var unstaged_header = model.begin_header(_("Unstaged"), (uint)Sidebar.Item.Type.UNSTAGED);
+
+			unstaged_header.activated.connect((numclick) => {
+				on_stage_selected_items();
+			});
+
+			if (unstaged.length == 0)
+			{
+				model.append_dummy(_("No unstaged files"));
+			}
+			else
+			{
+				current_unstaged = yield append_items(model,
+				                                      unstaged,
+				                                      Sidebar.Item.Type.UNSTAGED,
+				                                      selected_paths,
+				                                      (item) => {
+					if (d_main.sidebar.is_selected(item))
+					{
+						on_stage_selected_items();
+					}
+					else
+					{
+						on_unstaged_activated(new Gitg.StageStatusItem[] {item.item});
+					}
+				}, reload_serial);
+			}
+
+			model.end_header();
+			yield yield_main_loop();
+
+			if (reload_serial != d_reload_serial)
+			{
+				return;
+			}
+
+			// Populate untracked items
+			model.begin_header(_("Untracked"), (uint)Sidebar.Item.Type.UNTRACKED);
+
+			if (untracked.length == 0)
+			{
+				model.append_dummy(_("No untracked files"));
+			}
+			else
+			{
+				current_untracked = yield append_items(model,
+				                                       untracked,
+				                                       Sidebar.Item.Type.UNTRACKED,
+				                                       selected_paths,
+				                                       (item) => {
+					if (d_main.sidebar.is_selected(item))
+					{
+						on_stage_selected_items();
+					}
+					else
+					{
+						on_unstaged_activated(new Gitg.StageStatusItem[] {item.item});
+					}
+				}, reload_serial);
+			}
+
+			model.end_header();
+			yield yield_main_loop();
+
+			if (reload_serial != d_reload_serial)
+			{
+				return;
+			}
+
+			// Populate submodule items
+			if (hassub)
+			{
+				model.begin_header(_("Submodule"), (uint)Sidebar.Item.Type.SUBMODULE);
+
+				if (dirty.length == 0)
+				{
+					model.append_dummy(_("No dirty submodules"));
+				}
+				else
+				{
+					current_submodules = yield append_items(model,
+					                                        dirty,
+					                                        Sidebar.Item.Type.SUBMODULE,
+					                                        selected_paths,
+					                                        (item) => {
+					    if (d_main.sidebar.is_selected(item))
+					    {
+					    	on_stage_selected_items();
+					    }
+					    else
+					    {
+							on_unstaged_activated(new Gitg.StageStatusItem[] {item.item});
+						}
+					}, reload_serial);
+				}
+
+				model.end_header();
+				yield yield_main_loop();
+			}
+
+			if (reload_serial != d_reload_serial)
+			{
+				return;
+			}
+
+			d_main.sidebar.expand_all();
+			d_has_staged = staged.length != 0;
+			d_reloading = false;
+			d_main.status_loading = false;
+
+			if (selected_paths.size != 0)
+			{
+				Sidebar.Item[] sel = null;
+
+				switch (selected_type)
+				{
+				case Sidebar.Item.Type.STAGED:
+					sel = current_staged;
+					break;
+				case Sidebar.Item.Type.UNSTAGED:
+					sel = current_unstaged;
+					break;
+				case Sidebar.Item.Type.UNTRACKED:
+					sel = current_untracked;
+					break;
+				case Sidebar.Item.Type.SUBMODULE:
+					sel = current_submodules;
+					break;
+				}
+
+				if (sel == null || sel.length == 0)
+				{
+					sel = current_staged;
+				}
+
+				if (sel == null || sel.length == 0)
+				{
+					sel = current_unstaged;
+				}
+
+				if (sel == null || sel.length == 0)
+				{
+					sel = current_untracked;
+				}
+
+				if (sel == null || sel.length == 0)
+				{
+					sel = current_submodules;
+				}
+
+				if (sel != null && sel.length != 0)
+				{
+					foreach (var item in sel)
+					{
+						d_main.sidebar.select(item);
+					}
+				}
+				else if (selected_type == Sidebar.Item.Type.STAGED && current_staged.length != 0)
+				{
+					d_main.sidebar.select(current_staged[0]);
+				}
+				else if (selected_type == Sidebar.Item.Type.STAGED)
+				{
+					d_main.sidebar.select(staged_header);
+				}
+				else if (current_unstaged.length != 0)
+				{
+					d_main.sidebar.select(current_unstaged[0]);
+				}
+				else
+				{
+					d_main.sidebar.select(unstaged_header);
+				}
+			}
+			else
+			{
+				// Select the first file instead of the section header to avoid
+				// generating a giant diff for all files at once.
+				if (unstaged.length == 0)
+				{
+					if (current_staged.length != 0)
+					{
+						d_main.sidebar.select(current_staged[0]);
+					}
+					else
+					{
+						d_main.sidebar.select(staged_header);
+					}
+				}
+				else
+				{
+					if (current_unstaged.length != 0)
+					{
+						d_main.sidebar.select(current_unstaged[0]);
+					}
+					else
+					{
+						d_main.sidebar.select(unstaged_header);
+					}
+				}
+			}
 		}
 
 		private void reload()
@@ -778,10 +1113,27 @@ namespace GitgCommit
 				return;
 			}
 
+			d_reload_serial++;
+			uint reload_serial = d_reload_serial;
+
 			d_reloading = true;
+			d_main.status_loading = true;
 
 			var sb = d_main.sidebar;
 			var model = sb.model;
+
+			// Avoid blank content while status enumeration is running.
+			model.clear();
+			model.begin_header(_("Status"), (uint)Sidebar.Item.Type.NONE);
+			model.append_dummy(_("Loading changes..."));
+			model.end_header();
+			d_main.diff_view.diff = null;
+
+			if (d_status_enumerator != null)
+			{
+				d_status_enumerator.cancel();
+				d_status_enumerator = null;
+			}
 
 			Sidebar.Item.Type selected_type;
 			Gitg.StageStatusItem[] selected_items;
@@ -821,255 +1173,47 @@ namespace GitgCommit
 			var show = Ggit.StatusShow.INDEX_AND_WORKDIR;
 
 			var options = new Ggit.StatusOptions(opts, show, null);
-			var enumerator = stage.file_status(options);
+			d_status_enumerator = stage.file_status(options);
+			var enumerator = d_status_enumerator;
 
 			enumerator.next_items.begin(-1, (obj, res) => {
-				var items = enumerator.next_items.end(res);
-
-				var staged = new Gitg.StageStatusItem[items.length];
-				staged.length = 0;
-
-				var unstaged = new Gitg.StageStatusItem[items.length];
-				unstaged.length = 0;
-
-				var untracked = new Gitg.StageStatusItem[items.length];
-				untracked.length = 0;
-
-				var dirty = new Gitg.StageStatusItem[items.length];
-				dirty.length = 0;
-
-				bool hassub = false;
-
-				foreach (var item in items)
+				if (reload_serial != d_reload_serial)
 				{
-					if (item.is_staged)
-					{
-						staged += item;
-					}
-
-					if (item.is_unstaged)
-					{
-						unstaged += item;
-					}
-
-					if (item.is_untracked)
-					{
-						untracked += item;
-					}
-
-					var sub = item as Gitg.StageStatusSubmodule;
-
-					if (sub != null)
-					{
-						hassub = true;
-
-						if (sub.is_dirty)
-						{
-							dirty += item;
-						}
-					}
+					return;
 				}
 
-				model.clear();
-				d_main.diff_view.diff = null;
-
-				var current_staged = new Sidebar.Item[0];
-				var current_unstaged = new Sidebar.Item[0];
-				var current_untracked = new Sidebar.Item[0];
-				var current_submodules = new Sidebar.Item[0];
-
-				// Populate staged items
-				var staged_header = model.begin_header(_("Staged"), (uint)Sidebar.Item.Type.STAGED);
-
-				staged_header.activated.connect((numclick) => {
-					on_unstage_selected_items();
-				});
-
-				if (staged.length == 0)
+				if (d_status_enumerator == enumerator)
 				{
-					model.append_dummy(_("No staged files"));
-				}
-				else
-				{
-					current_staged = append_items(model,
-					                              staged,
-					                              Sidebar.Item.Type.STAGED,
-					                              selected_paths,
-					                              (item) => {
-						if (d_main.sidebar.is_selected(item))
-						{
-							on_unstage_selected_items();
-						}
-						else
-						{
-							on_staged_activated(new Gitg.StageStatusItem[] {item.item});
-						}
-					});
+					d_status_enumerator = null;
 				}
 
-				model.end_header();
+				Gitg.StageStatusItem[] items;
 
-				// Populate unstaged items
-				var unstaged_header = model.begin_header(_("Unstaged"), (uint)Sidebar.Item.Type.UNSTAGED);
-
-				unstaged_header.activated.connect((numclick) => {
-					on_stage_selected_items();
-				});
-
-				if (unstaged.length == 0)
+				try
 				{
-					model.append_dummy(_("No unstaged files"));
+					items = enumerator.next_items.end(res);
 				}
-				else
+				catch (Error e)
 				{
-					current_unstaged = append_items(model,
-					                                unstaged,
-					                                Sidebar.Item.Type.UNSTAGED,
-					                                selected_paths,
-					                                (item) => {
-						if (d_main.sidebar.is_selected(item))
-						{
-							on_stage_selected_items();
-						}
-						else
-						{
-							on_unstaged_activated(new Gitg.StageStatusItem[] {item.item});
-						}
-					});
-				}
+					d_reloading = false;
+					d_main.status_loading = false;
 
-				model.end_header();
-
-				// Populate untracked items
-				model.begin_header(_("Untracked"), (uint)Sidebar.Item.Type.UNTRACKED);
-
-				if (untracked.length == 0)
-				{
-					model.append_dummy(_("No untracked files"));
-				}
-				else
-				{
-					current_untracked = append_items(model,
-					                                 untracked,
-					                                 Sidebar.Item.Type.UNTRACKED,
-					                                 selected_paths,
-					                                 (item) => {
-						if (d_main.sidebar.is_selected(item))
-						{
-							on_stage_selected_items();
-						}
-						else
-						{
-							on_unstaged_activated(new Gitg.StageStatusItem[] {item.item});
-						}
-					});
-				}
-
-				model.end_header();
-
-				// Populate submodule items
-				if (hassub)
-				{
-					model.begin_header(_("Submodule"), (uint)Sidebar.Item.Type.SUBMODULE);
-
-					if (dirty.length == 0)
-					{
-						model.append_dummy(_("No dirty submodules"));
-					}
-					else
-					{
-						current_submodules = append_items(model,
-						                                  dirty,
-						                                  Sidebar.Item.Type.SUBMODULE,
-						                                  selected_paths,
-						                                  (item) => {
-						    if (d_main.sidebar.is_selected(item))
-						    {
-						    	on_stage_selected_items();
-						    }
-						    else
-						    {
-								on_unstaged_activated(new Gitg.StageStatusItem[] {item.item});
-							}
-						});
-					}
-
+					model.clear();
+					model.begin_header(_("Status"), (uint)Sidebar.Item.Type.NONE);
+					model.append_dummy(_("Failed to load changes"));
 					model.end_header();
+
+					application.show_infobar(_("Failed to load repository status"),
+					                         e.message,
+					                         Gtk.MessageType.ERROR);
+					return;
 				}
 
-				d_main.sidebar.expand_all();
-				d_has_staged = staged.length != 0;
-
-				d_reloading = false;
-
-				if (selected_paths.size != 0)
-				{
-					Sidebar.Item[] sel = null;
-
-					switch (selected_type)
-					{
-					case Sidebar.Item.Type.STAGED:
-						sel = current_staged;
-						break;
-					case Sidebar.Item.Type.UNSTAGED:
-						sel = current_unstaged;
-						break;
-					case Sidebar.Item.Type.UNTRACKED:
-						sel = current_untracked;
-						break;
-					case Sidebar.Item.Type.SUBMODULE:
-						sel = current_submodules;
-						break;
-					}
-
-					if (sel == null || sel.length == 0)
-					{
-						sel = current_staged;
-					}
-
-					if (sel == null || sel.length == 0)
-					{
-						sel = current_unstaged;
-					}
-
-					if (sel == null || sel.length == 0)
-					{
-						sel = current_untracked;
-					}
-
-					if (sel == null || sel.length == 0)
-					{
-						sel = current_submodules;
-					}
-
-					if (sel != null && sel.length != 0)
-					{
-						foreach (var item in sel)
-						{
-							d_main.sidebar.select(item);
-						}
-					}
-					else if (selected_type == Sidebar.Item.Type.STAGED)
-					{
-						d_main.sidebar.select(staged_header);
-					}
-					else
-					{
-						d_main.sidebar.select(unstaged_header);
-					}
-				}
-				else
-				{
-					// Select staged/unstaged header
-					if (unstaged.length == 0)
-					{
-						d_main.sidebar.select(staged_header);
-					}
-					else
-					{
-						d_main.sidebar.select(unstaged_header);
-					}
-				}
+				populate_sidebar.begin(reload_serial,
+				                       model,
+				                       (owned)items,
+				                       (owned)selected_paths,
+				                       selected_type);
 			});
 		}
 
@@ -1622,6 +1766,168 @@ namespace GitgCommit
 			application.user_query(q);
 		}
 
+		private string normalize_ignore_path(string path)
+		{
+			var ret = path.replace("\\", "/");
+
+			while (ret.has_prefix("./"))
+			{
+				ret = ret.substring(2);
+			}
+
+			while (ret.has_prefix("/"))
+			{
+				ret = ret.substring(1);
+			}
+
+			while (ret.has_suffix("/"))
+			{
+				ret = ret[0:ret.length - 1];
+			}
+
+			return ret;
+		}
+
+		private string ignore_file_pattern(string path)
+		{
+			return "/" + normalize_ignore_path(path);
+		}
+
+		private string? ignore_directory_pattern(string path)
+		{
+			var normalized = normalize_ignore_path(path);
+
+			// Ignore the repository top-level directory for this path.
+			var idx = normalized.index_of_char('/');
+
+			if (idx < 0)
+			{
+				return null;
+			}
+
+			var dir = normalized[0:idx];
+
+			if (dir.length == 0)
+			{
+				return null;
+			}
+
+			return "/" + dir + "/";
+		}
+
+		private async bool append_ignore_patterns(owned string[] patterns) throws Error
+		{
+			bool changed = false;
+
+			yield Gitg.Async.thread(() => {
+				string workdir = application.repository.get_workdir().get_path();
+				string gitignore = Path.build_filename(workdir, ".gitignore");
+				string current = "";
+
+				if (FileUtils.test(gitignore, FileTest.EXISTS))
+				{
+					size_t len;
+					FileUtils.get_contents(gitignore, out current, out len);
+				}
+
+				var seen = new Gee.HashSet<string>();
+				var lines = current.split("\n");
+
+				foreach (var line in lines)
+				{
+					seen.add(line.strip());
+				}
+
+				var builder = new StringBuilder(current);
+
+				if (builder.len != 0 && !current.has_suffix("\n"))
+				{
+					builder.append_c('\n');
+				}
+
+				foreach (var pattern in patterns)
+				{
+					var p = pattern.strip();
+
+					if (p == "" || seen.contains(p))
+					{
+						continue;
+					}
+
+					seen.add(p);
+					builder.append(p);
+					builder.append_c('\n');
+					changed = true;
+				}
+
+				if (changed)
+				{
+					FileUtils.set_contents(gitignore, builder.str, (ssize_t)builder.len);
+				}
+			});
+
+			return changed;
+		}
+
+		private void on_ignore_menu_activated(Gitg.StageStatusItem[] items, bool directory)
+		{
+			var set = new Gee.HashSet<string>();
+
+			foreach (var item in items)
+			{
+				string? pattern;
+
+				if (directory)
+				{
+					pattern = ignore_directory_pattern(item.path);
+				}
+				else
+				{
+					pattern = ignore_file_pattern(item.path);
+				}
+
+				if (pattern != null && pattern != "")
+				{
+					set.add(pattern);
+				}
+			}
+
+			if (set.size == 0)
+			{
+				return;
+			}
+
+			var patterns = new string[set.size];
+			var i = 0;
+
+			foreach (var pattern in set)
+			{
+				patterns[i] = pattern;
+				i++;
+			}
+
+			application.busy = true;
+
+			append_ignore_patterns.begin((owned)patterns, (o, res) => {
+				try
+				{
+					if (append_ignore_patterns.end(res))
+					{
+						d_ignore_external_changes = true;
+						reload();
+					}
+				}
+				catch (Error e)
+				{
+					application.show_infobar(_("Failed to update .gitignore"),
+					                         e.message,
+					                         Gtk.MessageType.ERROR);
+				}
+
+				application.busy = false;
+			});
+		}
+
 		private void do_populate_menu(Gtk.Menu menu)
 		{
 			var items = d_main.sidebar.get_selected_items<Gitg.SidebarItem>();
@@ -1675,6 +1981,41 @@ namespace GitgCommit
 
 			if (type == Sidebar.Item.Type.UNTRACKED)
 			{
+				var ignore_file = new Gtk.MenuItem.with_mnemonic(dngettext(null,
+				                                                           "Ignore _file",
+				                                                           "Ignore _files",
+				                                                           sitems.length));
+				ignore_file.sensitive = hasitems;
+
+				menu.append(ignore_file);
+
+				ignore_file.activate.connect(() => {
+					on_ignore_menu_activated(sitems, false);
+				});
+
+				bool has_directory_item = false;
+
+				foreach (var item in sitems)
+				{
+					if (ignore_directory_pattern(item.path) != null)
+					{
+						has_directory_item = true;
+						break;
+					}
+				}
+
+				var ignore_directory = new Gtk.MenuItem.with_mnemonic(dngettext(null,
+				                                                        "Ignore _directory",
+				                                                        "Ignore _directories",
+				                                                        sitems.length));
+				ignore_directory.sensitive = hasitems && has_directory_item;
+
+				menu.append(ignore_directory);
+
+				ignore_directory.activate.connect(() => {
+					on_ignore_menu_activated(sitems, true);
+				});
+
 				var del = new Gtk.MenuItem.with_mnemonic(dngettext(null, "D_elete file", "D_elete files", sitems.length));
 				del.sensitive = hasitems;
 
@@ -1762,6 +2103,15 @@ namespace GitgCommit
 
 		private void sidebar_selection_changed(Gitg.SidebarItem[] items)
 		{
+			if (items.length == 1 && items[0] is Gitg.SidebarStore.SidebarHeader)
+			{
+				show_ui(UiType.DIFF);
+				d_main.diff_view.diff = null;
+				d_main.button_stage.visible = false;
+				d_main.button_discard.visible = false;
+				return;
+			}
+
 			Sidebar.Item.Type type;
 
 			var sitems = items_for_items(items, out type);

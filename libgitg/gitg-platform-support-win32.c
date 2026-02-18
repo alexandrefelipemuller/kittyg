@@ -51,7 +51,14 @@ GInputStream *
 gitg_platform_support_http_get_finish (GAsyncResult  *result,
                                        GError       **error)
 {
-	return G_INPUT_STREAM (g_file_read_finish (g_async_result_get_source_object (result), result, error));
+	GObject *source_object;
+	GInputStream *stream;
+
+	source_object = g_async_result_get_source_object (result);
+	stream = G_INPUT_STREAM (g_file_read_finish (G_FILE (source_object), result, error));
+	g_object_unref (source_object);
+
+	return stream;
 }
 
 cairo_surface_t *

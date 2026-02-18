@@ -44,6 +44,12 @@ class Paned : Gitg.AnimatedPaned
 	[GtkChild]
 	private unowned Gtk.ScrolledWindow d_scrolled_window_commit_list;
 
+	[GtkChild]
+	private unowned Gtk.Revealer d_history_loading_revealer;
+
+	[GtkChild]
+	private unowned Gtk.Spinner d_history_loading_spinner;
+
 	public Gtk.Orientation inner_orientation
 	{
 		get { return d_paned_panels.orientation; }
@@ -177,6 +183,28 @@ class Paned : Gitg.AnimatedPaned
 	public Gtk.Stack stack_panel
 	{
 		get { return d_stack_panel; }
+	}
+
+	public bool history_loading
+	{
+		get
+		{
+			return d_history_loading_revealer.reveal_child;
+		}
+
+		set
+		{
+			d_history_loading_revealer.reveal_child = value;
+
+			if (value)
+			{
+				d_history_loading_spinner.start();
+			}
+			else
+			{
+				d_history_loading_spinner.stop();
+			}
+		}
 	}
 
 	protected override bool draw(Cairo.Context context)
