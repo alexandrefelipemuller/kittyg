@@ -58,6 +58,8 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 	[GtkChild]
 	private unowned Gtk.ToggleButton d_search_button;
 	[GtkChild]
+	private unowned Gtk.Button d_header_commit_button;
+	[GtkChild]
 	private unowned Gtk.MenuButton d_gear_menu;
 	[GtkChild]
 	private unowned Gtk.Image gear_image;
@@ -956,6 +958,7 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 		notify_property("current_activity");
 
 		var current = current_activity;
+		var status_activity = current is GitgCommit.Activity;
 
 		var searchable = current as GitgExt.Searchable;
 
@@ -963,7 +966,7 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 
 		if (searchable != null)
 		{
-			d_search_button.visible = true;
+			d_search_button.visible = !status_activity;
 			d_search_entry.text = searchable.search_text;
 			d_search_button.active = searchable.search_visible;
 
@@ -980,6 +983,8 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 			d_search_button.sensitive = false;
 			d_search_entry.text = "";
 		}
+
+		d_header_commit_button.visible = status_activity;
 
 		var selectable = (current as GitgExt.Selectable);
 
@@ -1486,9 +1491,11 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 
 			var issel = (d_selectable_mode == GitgExt.SelectionMode.SELECTION);
 			var searchable = current_activity as GitgExt.Searchable;
+			var status_activity = current_activity is GitgCommit.Activity;
 
 			d_header_bar.show_close_button = !Gitg.PlatformSupport.use_native_window_controls() && !issel;
-			d_search_button.visible = !issel && searchable != null;
+			d_search_button.visible = !issel && searchable != null && !status_activity;
+			d_header_commit_button.visible = !issel && status_activity;
 			d_gear_menu.visible = !issel;
 			d_select_button.visible = !issel;
 			d_dash_button.visible = !issel && d_repository != null;
@@ -1505,6 +1512,19 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 	private void on_select_cancel_button_clicked()
 	{
 		selectable_mode = GitgExt.SelectionMode.NORMAL;
+	}
+
+	[GtkCallback]
+	private void on_header_commit_button_clicked()
+	{
+		var status_activity = current_activity as GitgCommit.Activity;
+
+		if (status_activity == null)
+		{
+			return;
+		}
+
+		status_activity.trigger_commit();
 	}
 
 	[Signal(action = true)]
@@ -1546,4 +1566,3 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 }
 
 // ex:ts=4 noet
-

@@ -80,6 +80,7 @@ namespace Gitg
 
 		private uint d_size;
 		private int d_stamp;
+		private bool d_has_uncommitted_marker;
 
 		public uint limit { get; set; }
 
@@ -173,6 +174,7 @@ namespace Gitg
 			d_ids = new Commit[0];
 			d_hidden_ids = new Commit[0];
 			d_advertized_size = 0;
+			d_has_uncommitted_marker = false;
 
 			d_id_hash = new Gee.HashMap<Ggit.OId, int>();
 		}
@@ -368,13 +370,27 @@ namespace Gitg
 
 				d_lanes.reset(permanent, incset);
 
+				var has_uncommitted_changes = false;
+				var status_options = new Ggit.StatusOptions(Ggit.StatusOption.EXCLUDE_SUBMODULES,
+				                                            Ggit.StatusShow.WORKDIR_ONLY,
+				                                            null);
+
+				try
+				{
+					d_repository.file_status_foreach(status_options, (path, flags) => {
+						has_uncommitted_changes = true;
+						return -1;
+					});
+				}
+				catch {}
+
 				uint size;
 				uint hidden_size;
 
 				// Pre-allocate array to store commits
 				lock(d_ids)
 				{
-					d_ids = new Commit[1000];
+					d_ids = new Commit[has_uncommitted_changes ? 1001 : 1000];
 					d_hidden_ids = new Commit[100];
 
 					size = d_ids.length;
@@ -384,6 +400,12 @@ namespace Gitg
 					d_hidden_ids.length = 0;
 
 					d_advertized_size = 0;
+					d_has_uncommitted_marker = has_uncommitted_changes;
+				}
+
+				if (has_uncommitted_changes)
+				{
+					d_ids[d_ids.length++] = null;
 				}
 
 				Timer timer = new Timer();
@@ -421,7 +443,6 @@ namespace Gitg
 					bool finded = d_lanes.next(commit, out lanes, out mylane, true);
 					if (finded)
 					{
-						debug ("finded parent for %s %s\n", commit.get_subject(), commit.get_id().to_string());
 						commit.update_lanes((owned)lanes, mylane);
 
 						lock(d_id_hash)
@@ -449,12 +470,10 @@ namespace Gitg
 						while (iter.next())
 						{
 							var miss_commit = iter.get();
-							debug ("trying again %s %s", miss_commit.get_subject(), miss_commit.get_id().to_string());
 							bool tmp_finded = d_lanes.next(miss_commit, out lanes, out mylane);
 							if (tmp_finded)
 							{
 								finded = true;
-								debug ("finded parent for miss %s %s\n", miss_commit.get_subject(), miss_commit.get_id().to_string());
 								iter.remove();
 								commit = miss_commit;
 
@@ -627,6 +646,33 @@ namespace Gitg
 
 			val.init(get_column_type(column));
 
+			if (d_has_uncommitted_marker && idx == 0)
+			{
+				switch (column)
+				{
+					case CommitModelColumns.SUBJECT:
+					case CommitModelColumns.MESSAGE:
+						val.set_string(_("Uncommitted changes"));
+					break;
+					case CommitModelColumns.SHA1:
+					case CommitModelColumns.COMMITTER:
+					case CommitModelColumns.COMMITTER_NAME:
+					case CommitModelColumns.COMMITTER_EMAIL:
+					case CommitModelColumns.COMMITTER_DATE:
+					case CommitModelColumns.AUTHOR:
+					case CommitModelColumns.AUTHOR_NAME:
+					case CommitModelColumns.AUTHOR_EMAIL:
+					case CommitModelColumns.AUTHOR_DATE:
+						val.set_string("");
+					break;
+					case CommitModelColumns.COMMIT:
+						val.set_object(null);
+					break;
+				}
+
+				return;
+			}
+
 			if (commit == null)
 			{
 				return;
@@ -711,6 +757,18 @@ namespace Gitg
 			return this[(uint)indices[0]];
 		}
 
+		public bool iter_is_uncommitted_marker(Gtk.TreeIter iter)
+		{
+			return_val_if_fail(iter.stamp == d_stamp, false);
+
+			if (!d_has_uncommitted_marker)
+			{
+				return false;
+			}
+
+			return (uint)(ulong)iter.user_data == 0;
+		}
+		
 		public bool iter_children(out Gtk.TreeIter iter, Gtk.TreeIter? parent)
 		{
 			iter = {};

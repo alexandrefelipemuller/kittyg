@@ -117,19 +117,68 @@
           </packing>
         </child>
         <child>
+          <object class="GtkButton" id="d_header_commit_button">
+            <property name="visible">False</property>
+            <property name="valign">center</property>
+            <property name="can_focus">False</property>
+            <property name="tooltip-text" translatable="yes">Commit staged changes</property>
+            <signal name="clicked" handler="on_header_commit_button_clicked" swapped="no"/>
+            <style>
+              <class name="image-button"/>
+            </style>
+            <child>
+              <object class="GtkBox">
+                <property name="visible">True</property>
+                <property name="orientation">vertical</property>
+                <property name="spacing">2</property>
+                <child>
+                  <object class="GtkImage">
+                    <property name="visible">True</property>
+                    <property name="icon_size">1</property>
+                    <property name="icon_name">list-add-symbolic</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="visible">True</property>
+                    <property name="label" translatable="yes">Commit</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+          <packing>
+            <property name="pack_type">end</property>
+          </packing>
+        </child>
+        <child>
           <object class="GtkToggleButton" id="d_select_button">
             <property name="visible">True</property>
             <property name="valign">center</property>
             <property name="can_focus">False</property>
             <property name="action_name">win.select</property>
+            <property name="tooltip-text" translatable="yes">Select and manage projects</property>
             <style>
               <class name="image-button"/>
             </style>
             <child>
-              <object class="GtkImage" id="select_image">
+              <object class="GtkBox">
                 <property name="visible">True</property>
-                <property name="icon_size">1</property>
-                <property name="icon_name">object-select-symbolic</property>
+                <property name="orientation">vertical</property>
+                <property name="spacing">2</property>
+                <child>
+                  <object class="GtkImage" id="select_image">
+                    <property name="visible">True</property>
+                    <property name="icon_size">1</property>
+                    <property name="icon_name">object-select-symbolic</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="visible">True</property>
+                    <property name="label" translatable="yes">Manage</property>
+                  </object>
+                </child>
               </object>
             </child>
           </object>

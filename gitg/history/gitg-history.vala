@@ -248,11 +248,6 @@ namespace GitgHistory
 
 		private void on_commit_model_started(Gitg.CommitModel model)
 		{
-			if (d_main != null)
-			{
-				d_main.history_loading = true;
-			}
-
 			if (d_insertsig == 0)
 			{
 				d_insertsig = d_commit_list_model.row_inserted.connect(on_row_inserted_select);
@@ -262,6 +257,10 @@ namespace GitgHistory
 		private void on_row_inserted_select(Gtk.TreeModel model, Gtk.TreePath path, Gtk.TreeIter iter)
 		{
 			var commit = d_commit_list_model.commit_from_path(path);
+			if (commit == null)
+			{
+				return;
+			}
 
 			var sel = d_main.commit_list_view.get_selection();
 
@@ -323,13 +322,34 @@ namespace GitgHistory
 			}
 		}
 
-		private void on_commit_model_finished(Gitg.CommitModel model)
+		private void reset_adjustment_to_lower(Gtk.Adjustment? adjustment)
 		{
-			if (d_main != null)
+			if (adjustment == null)
 			{
-				d_main.history_loading = false;
+				return;
 			}
 
+			var lower = adjustment.get_lower();
+
+			if (adjustment.get_value() != lower)
+			{
+				adjustment.set_value(lower);
+			}
+		}
+
+		private void reset_history_horizontal_scroll()
+		{
+			if (d_main == null)
+			{
+				return;
+			}
+
+			reset_adjustment_to_lower(d_main.commit_list_view.get_hadjustment());
+			reset_adjustment_to_lower(d_main.commit_list_scrolled_window.get_hadjustment());
+		}
+
+		private void on_commit_model_finished(Gitg.CommitModel model)
+		{
 			if (d_insertsig != 0)
 			{
 				d_commit_list_model.disconnect(d_insertsig);
@@ -337,6 +357,24 @@ namespace GitgHistory
 			}
 
 			scroll_into_view();
+
+			if (d_main != null)
+			{
+				// Keep commit rows visible when switching repositories with very wide graphs.
+				reset_history_horizontal_scroll();
+
+				weak Paned? weak_main = d_main;
+				Idle.add(() => {
+					if (weak_main == null || d_main == null || weak_main != d_main)
+					{
+						return false;
+					}
+
+					reset_history_horizontal_scroll();
+					d_main.commit_list_view.queue_draw();
+					return false;
+				});
+			}
 		}
 
 		private void on_commit_model_begin_clear(Gitg.CommitModel model)
@@ -426,12 +464,19 @@ namespace GitgHistory
 						stderr.printf("Failed to set %s: %s\n", key, e.message);
 					}
 				}
-				else
-				{
-					config.delete_entry(key);
+					else
+					{
+						try
+						{
+							config.delete_entry(key);
+						}
+						catch (Error e)
+						{
+							stderr.printf("Failed to delete %s: %s\n", key, e.message);
+						}
+					}
 				}
 			}
-		}
 
 		private void reload_main_references()
 		{
@@ -968,11 +1013,13 @@ namespace GitgHistory
 
 			bool shift_pressed = (event.state & Gdk.ModifierType.SHIFT_MASK) != 0;
 			var fetch = new Gitg.RefActionFetch(application, af, reference, null, shift_pressed);
+			var pull = new Gitg.RefActionPull(application, af, reference);
 
-			if (fetch.available)
+			if (fetch.available || pull.available)
 			{
 				actions.add(null);
 				add_ref_action(actions, fetch);
+				add_ref_action(actions, pull);
 			}
 
 			var push = new Gitg.RefActionPush(application, af, reference);
@@ -1234,12 +1281,6 @@ namespace GitgHistory
 
 		private void update_walker()
 		{
-			if (d_main != null)
-			{
-				// Ensure loading state is reset if reload short-circuits (e.g. no selection).
-				d_main.history_loading = false;
-			}
-
 			d_selected.clear();
 
 			var include = new Gee.HashSet<Ggit.OId>((Gee.HashDataFunc)Ggit.OId.hash,
@@ -1319,6 +1360,28 @@ namespace GitgHistory
 						} catch {}
 					}
 				}
+			}
+
+			// Fallback: if selection did not resolve to any OID (edge cases with refs
+			// state/race), ensure the current HEAD is still shown instead of an empty history.
+			if (include.size == 0 && application.repository != null)
+			{
+				try
+				{
+					var head_id = id_for_ref(application.repository.get_head());
+
+					if (head_id != null)
+					{
+						include.add(head_id);
+						d_selected.add(head_id);
+
+						if (perm_uniq.add(head_id))
+						{
+							permanent += head_id;
+						}
+					}
+				}
+				catch {}
 			}
 
 			d_commit_list_model.set_permanent_lanes(permanent);

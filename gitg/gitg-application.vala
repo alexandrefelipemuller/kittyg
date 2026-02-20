@@ -34,6 +34,7 @@ public class Application : Gtk.Application
 	private static bool standalone = false;
 	private static ApplicationCommandLine app_command_line;
 	private static bool init = false;
+	private static string askpass_prompt;
 
 	private const OptionEntry[] entries = {
 		{"version", 'v', OptionFlags.NO_ARG, OptionArg.CALLBACK,
@@ -48,6 +49,8 @@ public class Application : Gtk.Application
 		 ref standalone, N_("Run kittyg in standalone mode"), null},
 		{"init", 0, 0, OptionArg.NONE,
 		 ref init, N_("Put paths under git if needed"), null},
+		{"askpass", 0, OptionFlags.HIDDEN, OptionArg.STRING,
+		 ref askpass_prompt, null, null},
 		{null}
 	};
 
@@ -79,6 +82,72 @@ public class Application : Gtk.Application
 	static construct
 	{
 		activity = "";
+		askpass_prompt = "";
+	}
+
+	private static bool prompt_looks_secret(string prompt)
+	{
+		var lowered = prompt.down();
+
+		if (lowered.contains("username") ||
+		    lowered.contains("user name") ||
+		    lowered.contains("login"))
+		{
+			return false;
+		}
+
+		return lowered.contains("password") ||
+		       lowered.contains("passphrase") ||
+		       lowered.contains("token") ||
+		       lowered.contains("senha");
+	}
+
+	private static bool run_askpass_dialog(string prompt)
+	{
+		var dialog = new Gtk.Dialog.with_buttons(_("Authentication required"),
+		                                         null,
+		                                         Gtk.DialogFlags.MODAL,
+		                                         _("_Cancel"),
+		                                         Gtk.ResponseType.CANCEL,
+		                                         _("_OK"),
+		                                         Gtk.ResponseType.OK);
+		dialog.set_default_response(Gtk.ResponseType.OK);
+		dialog.window_position = Gtk.WindowPosition.CENTER;
+
+		var content = dialog.get_content_area();
+		var box = new Gtk.Box(Gtk.Orientation.VERTICAL, 12);
+		box.margin_top = 12;
+		box.margin_bottom = 12;
+		box.margin_start = 12;
+		box.margin_end = 12;
+
+		var label = new Gtk.Label(prompt.strip());
+		label.wrap = true;
+		label.xalign = 0.0f;
+		box.pack_start(label, false, false, 0);
+
+		var entry = new Gtk.Entry();
+		entry.activates_default = true;
+
+		if (prompt_looks_secret(prompt))
+		{
+			entry.visibility = false;
+			entry.input_purpose = Gtk.InputPurpose.PASSWORD;
+		}
+
+		box.pack_start(entry, false, false, 0);
+		content.add(box);
+
+		dialog.show_all();
+
+		var response = (Gtk.ResponseType)dialog.run();
+		if (response == Gtk.ResponseType.OK)
+		{
+			stdout.printf("%s\n", entry.text);
+		}
+
+		dialog.destroy();
+		return response == Gtk.ResponseType.OK;
 	}
 
 	private static bool show_version_and_quit()
@@ -158,6 +227,13 @@ public class Application : Gtk.Application
 		if (app_quit)
 		{
 			exit_status = 0;
+			return true;
+		}
+
+		if (askpass_prompt != "")
+		{
+			exit_status = run_askpass_dialog(askpass_prompt) ? 0 : 1;
+			askpass_prompt = "";
 			return true;
 		}
 

@@ -26,8 +26,10 @@ namespace Gitg
 		public uint lane_width { get; set; default = 16; }
 		public uint dot_width { get; set; default = 10; }
 		public unowned SList<Ref> labels { get; set; }
+		public bool virtual_uncommitted { get; set; default = false; }
 
 		private int d_last_height;
+		private const int MIN_VISIBLE_SUBJECT_WIDTH = 120;
 
 		private delegate double DirectionFunc(double i);
 
@@ -35,6 +37,16 @@ namespace Gitg
 		{
 			get
 			{
+				if (virtual_uncommitted)
+				{
+					return 1;
+				}
+
+				if (commit == null)
+				{
+					return 0;
+				}
+
 				int ret = 0;
 				int trailing_hidden = 0;
 
@@ -56,10 +68,64 @@ namespace Gitg
 			}
 		}
 
+		private uint lanes_width()
+		{
+			var lanes_width = num_visible_lanes * lane_width;
+			var max_lanes_width = lane_width * 40;
+
+			if (lanes_width > max_lanes_width)
+			{
+				lanes_width = max_lanes_width;
+			}
+
+			return lanes_width;
+		}
+
 		private uint total_width(Gtk.Widget widget)
 		{
-			return num_visible_lanes * lane_width +
+			return lanes_width() +
 			       LabelRenderer.width(widget, font_desc, labels);
+		}
+
+		private int clamp_offset_to_cell_width(int desired_offset,
+		                                       Gdk.Rectangle cell_area)
+		{
+			var max_offset = int.max(0, cell_area.width - MIN_VISIBLE_SUBJECT_WIDTH);
+			var bounded_offset = int.min(desired_offset, max_offset);
+
+			return bounded_offset;
+		}
+
+		private int bounded_subject_offset(Gtk.Widget widget,
+		                                   Gdk.Rectangle cell_area)
+		{
+			var desired_offset = (int)total_width(widget);
+			return clamp_offset_to_cell_width(desired_offset, cell_area);
+		}
+
+		private int bounded_labels_offset(Gdk.Rectangle cell_area)
+		{
+			return clamp_offset_to_cell_width((int)lanes_width(), cell_area);
+		}
+
+		private void shrink_text_areas(ref Gdk.Rectangle area,
+		                               ref Gdk.Rectangle cell_area,
+		                               bool             rtl,
+		                               int              offset)
+		{
+			if (offset <= 0)
+			{
+				return;
+			}
+
+			if (!rtl)
+			{
+				area.x += offset;
+				cell_area.x += offset;
+			}
+
+			area.width = int.max(0, area.width - offset);
+			cell_area.width = int.max(0, cell_area.width - offset);
 		}
 
 		public override void get_preferred_width(Gtk.Widget widget,
@@ -225,11 +291,10 @@ namespace Gitg
 
 		private void draw_labels(Cairo.Context context,
 		                         Gtk.Widget    widget,
-		                         Gdk.Rectangle area)
+		                         Gdk.Rectangle area,
+		                         Gdk.Rectangle cell_area)
 		{
-			int offset;
-
-			offset = (int)(num_visible_lanes * lane_width);
+			var offset = bounded_labels_offset(cell_area);
 
 			var rtl = (widget.get_style_context().get_state() & Gtk.StateFlags.DIR_RTL) != 0;
 
@@ -270,6 +335,42 @@ namespace Gitg
 			context.restore();
 		}
 
+		private void draw_uncommitted_marker(Cairo.Context context,
+		                                     Gtk.Widget    widget,
+		                                     Gdk.Rectangle area)
+		{
+			var rtl = (widget.get_style_context().get_state() & Gtk.StateFlags.DIR_RTL) != 0;
+			double x;
+
+			if (rtl)
+			{
+				x = area.x + area.width - lane_width / 2.0;
+			}
+			else
+			{
+				x = area.x + lane_width / 2.0;
+			}
+
+			var y = area.y + area.height / 2.0;
+			var radius = dot_width / 2.0;
+			var gray = 0.55;
+
+			context.save();
+			context.set_line_width(2.0);
+			context.set_line_cap(Cairo.LineCap.ROUND);
+			context.set_source_rgb(gray, gray, gray);
+			context.move_to(x, area.y);
+			context.line_to(x, area.y + area.height);
+			context.stroke();
+
+			context.arc(x, y, radius, 0, 2 * Math.PI);
+			context.set_source_rgb(0, 0, 0);
+			context.stroke_preserve();
+			context.set_source_rgb(gray, gray, gray);
+			context.fill();
+			context.restore();
+		}
+
 		public override void render(Cairo.Context         context,
 		                            Gtk.Widget            widget,
 		                            Gdk.Rectangle         area,
@@ -283,7 +384,18 @@ namespace Gitg
 
 			d_last_height = area.height;
 
-			if (commit != null)
+			if (virtual_uncommitted)
+			{
+				context.save();
+				Gdk.cairo_rectangle(context, area);
+				context.clip();
+				draw_uncommitted_marker(context, widget, area);
+
+				var tw = clamp_offset_to_cell_width((int)lane_width, cell_area);
+				shrink_text_areas(ref narea, ref ncell_area, rtl, tw);
+				context.restore();
+			}
+			else if (commit != null)
 			{
 				context.save();
 
@@ -291,20 +403,10 @@ namespace Gitg
 				context.clip();
 
 				draw_lane(context, widget, area);
-				draw_labels(context, widget, area);
+				draw_labels(context, widget, area, cell_area);
 
-				var tw = total_width(widget);
-
-				if (!rtl)
-				{
-					narea.x += (int)tw;
-					ncell_area.x += (int)tw;
-				}
-				else
-				{
-					narea.width -= (int)tw;
-					ncell_area.width -= (int)tw;
-				}
+				var tw = bounded_subject_offset(widget, cell_area);
+				shrink_text_areas(ref narea, ref ncell_area, rtl, tw);
 
 				context.restore();
 			}
@@ -323,7 +425,9 @@ namespace Gitg
 		                           out int    hot_x)
 		{
 			var rtl = (widget.get_style_context().get_state() & Gtk.StateFlags.DIR_RTL) != 0;
-			var offset = (int)(num_visible_lanes * lane_width);
+			Gdk.Rectangle cell_area = {0};
+			cell_area.width = cell_w;
+			var offset = bounded_labels_offset(cell_area);
 
 			if (rtl)
 			{

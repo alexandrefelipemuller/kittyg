@@ -124,6 +124,7 @@ public class Remote : Ggit.Remote
 	private double d_transfer_progress;
 
 	private Callbacks? d_callbacks;
+	private static string? s_askpass_script;
 
 	public signal void tip_updated(string refname, Ggit.OId a, Ggit.OId b);
 
@@ -311,6 +312,17 @@ public class Remote : Ggit.Remote
 
 	private bool use_system_git_client()
 	{
+		var env_client = Environment.get_variable("KITTYG_GIT_CLIENT");
+
+		if (env_client == "system")
+		{
+			return true;
+		}
+		else if (env_client == "embedded")
+		{
+			return false;
+		}
+
 		try
 		{
 			var settings = new Settings(Gitg.Config.APPLICATION_ID + ".preferences.general");
@@ -338,6 +350,168 @@ public class Remote : Ggit.Remote
 				callbacks.progress(msg);
 			}
 		}
+	}
+
+	private async void fetch_from_system_git(string?                     message,
+	                                         Ggit.RemoteCallbacks?       callbacks,
+	                                         Ggit.RemoteDownloadTagsType? download_tags) throws Error
+	{
+		var owner = get_owner();
+
+		if (owner == null)
+		{
+			throw new IOError.FAILED(_("Failed to determine repository for fetch"));
+		}
+
+		var cwd_file = owner.get_workdir();
+
+		if (cwd_file == null)
+		{
+			cwd_file = owner.get_location();
+		}
+
+		if (cwd_file == null || cwd_file.get_path() == null)
+		{
+			throw new IOError.FAILED(_("Failed to determine working directory for fetch"));
+		}
+
+		var remote_target = get_name();
+
+		if (remote_target == null || remote_target == "")
+		{
+			remote_target = get_url();
+		}
+
+		if (remote_target == null || remote_target == "")
+		{
+			throw new IOError.FAILED(_("Failed to determine remote for fetch"));
+		}
+
+		string[] argv = {"git", "fetch", "--progress", "--prune"};
+
+		if (download_tags != null)
+		{
+			switch (download_tags)
+			{
+				case Ggit.RemoteDownloadTagsType.NONE:
+					argv += "--no-tags";
+					break;
+				case Ggit.RemoteDownloadTagsType.ALL:
+					argv += "--tags";
+					break;
+				default:
+					break;
+			}
+		}
+
+		argv += remote_target;
+
+		string? stdout_data = null;
+		string? stderr_data = null;
+		int exit_status = 0;
+		var envp = build_system_git_environment();
+
+		yield Async.thread(() => {
+			Process.spawn_sync(cwd_file.get_path(),
+			                   argv,
+			                   envp,
+			                   SpawnFlags.SEARCH_PATH,
+			                   null,
+			                   out stdout_data,
+			                   out stderr_data,
+			                   out exit_status);
+		});
+
+		emit_push_output(callbacks, stdout_data);
+		emit_push_output(callbacks, stderr_data);
+
+		if (exit_status != 0)
+		{
+			var msg = (stderr_data ?? "").strip();
+
+			if (msg == "")
+			{
+				msg = (stdout_data ?? "").strip();
+			}
+
+			if (msg == "")
+			{
+				msg = _("git fetch failed with exit code %d").printf(exit_status);
+			}
+
+			throw new IOError.FAILED(msg);
+		}
+	}
+
+	private string shell_quote(string value)
+	{
+		return "'" + value.replace("'", "'\"'\"'") + "'";
+	}
+
+	private string? resolve_askpass_executable()
+	{
+		try
+		{
+			var self_executable = FileUtils.read_link("/proc/self/exe");
+			if (self_executable != null && self_executable != "")
+			{
+				return self_executable;
+			}
+		}
+		catch {}
+
+		return Environment.find_program_in_path("kittyg");
+	}
+
+	private string? ensure_askpass_script()
+	{
+		if (s_askpass_script != null && FileUtils.test(s_askpass_script, FileTest.EXISTS))
+		{
+			return s_askpass_script;
+		}
+
+		var executable = resolve_askpass_executable();
+		if (executable == null || executable == "")
+		{
+			return null;
+		}
+
+		try
+		{
+			var temp_dir = DirUtils.make_tmp("kittyg-askpass-XXXXXX");
+			var script_path = Path.build_filename(temp_dir, "askpass.sh");
+			var script_content = "#!/bin/sh\nexec " + shell_quote(executable) + " --askpass \"$1\"\n";
+			FileUtils.set_contents(script_path, script_content);
+
+			var script_file = File.new_for_path(script_path);
+			var info = new FileInfo();
+			info.set_attribute_uint32(FileAttribute.UNIX_MODE, 448u); // 0700
+			script_file.set_attributes_from_info(info, FileQueryInfoFlags.NONE, null);
+
+			s_askpass_script = script_path;
+			return s_askpass_script;
+		}
+		catch (Error e)
+		{
+			warning("Failed to prepare askpass helper: %s", e.message);
+			return null;
+		}
+	}
+
+	private string[] build_system_git_environment()
+	{
+		var envp = Environ.get();
+		var askpass_script = ensure_askpass_script();
+
+		if (askpass_script != null && askpass_script != "")
+		{
+			envp = Environ.set_variable((owned) envp, "GIT_ASKPASS", askpass_script, true);
+			envp = Environ.set_variable((owned) envp, "SSH_ASKPASS", askpass_script, true);
+			envp = Environ.set_variable((owned) envp, "SSH_ASKPASS_REQUIRE", "force", true);
+			envp = Environ.set_variable((owned) envp, "GIT_TERMINAL_PROMPT", "0", true);
+		}
+
+		return envp;
 	}
 
 	private async void push_to_system_git(bool                  force,
@@ -391,11 +565,12 @@ public class Remote : Ggit.Remote
 		string? stdout_data = null;
 		string? stderr_data = null;
 		int exit_status = 0;
+		var envp = build_system_git_environment();
 
 		yield Async.thread(() => {
 			Process.spawn_sync(cwd_file.get_path(),
 			                   argv,
-			                   null,
+			                   envp,
 			                   SpawnFlags.SEARCH_PATH,
 			                   null,
 			                   out stdout_data,
@@ -464,6 +639,27 @@ public class Remote : Ggit.Remote
 
 	private async void download_intern(string? message, Ggit.RemoteCallbacks? callbacks, Ggit.RemoteDownloadTagsType? download_tags) throws Error
 	{
+		if (use_system_git_client())
+		{
+			state = RemoteState.TRANSFERRING;
+			reset_transfer_progress(false);
+
+			try
+			{
+				yield fetch_from_system_git(message, callbacks, download_tags);
+			}
+			catch (Error e)
+			{
+				update_state();
+				reset_transfer_progress(true);
+				throw e;
+			}
+
+			update_state();
+			reset_transfer_progress(true);
+			return;
+		}
+
 		bool dis = false;
 
 		if (!get_connected())

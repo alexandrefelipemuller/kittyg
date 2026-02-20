@@ -78,9 +78,25 @@ namespace Gitg
 
 			CellRendererLanes lanes = (CellRendererLanes)cell;
 			Commit? commit = m.commit_from_iter(iter);
+			lanes.virtual_uncommitted = false;
+			lanes.commit = null;
+			lanes.next_commit = null;
+			lanes.labels = null;
 
 			if (commit == null)
 			{
+				if (m.iter_is_uncommitted_marker(iter))
+				{
+					lanes.virtual_uncommitted = true;
+
+					var cp = iter;
+
+					if (m.iter_next(ref cp))
+					{
+						lanes.next_commit = m.commit_from_iter(cp);
+					}
+				}
+
 				return;
 			}
 

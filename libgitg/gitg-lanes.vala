@@ -168,13 +168,11 @@ public class Lanes : Object
 			expand_lanes(next);
 		}
 
-		debug("commit: %s %s", next.get_subject(), next.get_id().to_string());
 		LaneContainer? mylane = find_lane_by_oid(myoid, out nextpos);
 		if (mylane == null && d_roots != null && !d_roots.contains(myoid))
 		{
 			lanes = null;
 			if (save_miss) {
-				debug ("saving miss %s %s", next.get_id().to_string(), next.get_id().to_string());
 				miss_commits.add(next);
 			}
 

@@ -1422,6 +1422,11 @@ namespace GitgCommit
 			}
 		}
 
+		public void trigger_commit()
+		{
+			on_commit_clicked();
+		}
+
 		private async void stage_unstage_selection(bool staging) throws Error
 		{
 			var selection = d_main.diff_view.get_selection();

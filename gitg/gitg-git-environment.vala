@@ -115,6 +115,9 @@ public class GitEnvironment : Object
 
 	public void apply()
 	{
+		var git_client = d_settings.get_string("git-client");
+		Environment.set_variable("KITTYG_GIT_CLIENT", git_client, true);
+
 		var embedded_bindir = get_embedded_git_bin_dir();
 		if (embedded_bindir == null)
 		{
@@ -133,7 +136,7 @@ public class GitEnvironment : Object
 			}
 		}
 
-		if (d_settings.get_string("git-client") == "embedded")
+		if (git_client == "embedded")
 		{
 			string[] with_embedded = { embedded_bindir };
 			foreach (var entry in filtered)
