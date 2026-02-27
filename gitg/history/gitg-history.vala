@@ -168,7 +168,10 @@ namespace GitgHistory
 
 		private void repository_changed_externally(GitgExt.ExternalChangeHint hint)
 		{
-			if (d_main != null && (hint & GitgExt.ExternalChangeHint.REFS) != 0  && !d_ignore_external)
+			if (d_main != null &&
+			    ((hint & GitgExt.ExternalChangeHint.REFS) != 0 ||
+			     (hint & GitgExt.ExternalChangeHint.INDEX) != 0) &&
+			    !d_ignore_external)
 			{
 				reload_when_mapped();
 			}
@@ -781,6 +784,144 @@ namespace GitgHistory
 			return ret;
 		}
 
+		private string build_default_stash_message()
+		{
+			Gitg.Ref? head = null;
+
+			try
+			{
+				head = application.repository.lookup_reference("HEAD");
+			}
+			catch {}
+
+			if (head != null)
+			{
+				var headname = head.parsed_name.shortname;
+
+				try
+				{
+					var head_commit = head.resolve().lookup() as Ggit.Commit;
+					var shortid = head_commit.get_id().to_string()[0:6];
+					var subject = head_commit.get_subject();
+
+					return @"WIP on $(headname): $(shortid) $(subject)";
+				}
+				catch
+				{
+					return @"WIP on $(headname)";
+				}
+			}
+
+			return "WIP on HEAD";
+		}
+
+		private string? query_stash_message()
+		{
+			var default_message = build_default_stash_message();
+			var dialog = new Gtk.Dialog.with_buttons(_("Stash changes"),
+			                                         application as Gtk.Window,
+			                                         Gtk.DialogFlags.MODAL,
+			                                         _("_Cancel"),
+			                                         Gtk.ResponseType.CANCEL,
+			                                         _("Stash"),
+			                                         Gtk.ResponseType.OK);
+			dialog.set_default_response(Gtk.ResponseType.OK);
+
+			var content = dialog.get_content_area();
+			var box = new Gtk.Box(Gtk.Orientation.VERTICAL, 8);
+			box.margin_top = 12;
+			box.margin_bottom = 12;
+			box.margin_start = 12;
+			box.margin_end = 12;
+
+			var label = new Gtk.Label(_("Stash name"));
+			label.xalign = 0.0f;
+			box.pack_start(label, false, false, 0);
+
+			var entry = new Gtk.Entry();
+			entry.text = default_message;
+			entry.activates_default = true;
+			box.pack_start(entry, false, false, 0);
+
+			content.add(box);
+			dialog.show_all();
+
+			var response = (Gtk.ResponseType)dialog.run();
+			var stash_message = entry.text.strip();
+			dialog.destroy();
+
+			if (response != Gtk.ResponseType.OK)
+			{
+				return null;
+			}
+
+			if (stash_message == "")
+			{
+				return default_message;
+			}
+
+			return stash_message;
+		}
+
+		private async void stash_uncommitted_changes()
+		{
+			var committer = application.get_verified_committer();
+
+			if (committer == null)
+			{
+				return;
+			}
+
+			var message = query_stash_message();
+
+			if (message == null)
+			{
+				return;
+			}
+
+			try
+			{
+				yield Gitg.Async.thread(() => {
+					application.repository.save_stash(committer, message, Ggit.StashFlags.DEFAULT);
+				});
+			}
+			catch (Error err)
+			{
+				application.show_infobar(_("Failed to stash changes"),
+				                         err.message,
+				                         Gtk.MessageType.ERROR);
+				return;
+			}
+
+			application.repository_commits_changed();
+		}
+
+		private Gtk.Menu popup_menu_for_uncommitted_marker()
+		{
+			Gtk.Menu menu = new Gtk.Menu();
+
+			var item = new Gtk.MenuItem.with_mnemonic(_("Stash changes"));
+			item.show();
+			item.activate.connect(() => {
+				stash_uncommitted_changes.begin();
+			});
+
+			menu.append(item);
+			return menu;
+		}
+
+		private bool path_is_uncommitted_marker(Gtk.TreePath path)
+		{
+			Gtk.TreeIter iter;
+
+			if (!d_commit_list_model.get_iter(out iter, path))
+			{
+				return false;
+			}
+
+			return d_commit_list_model.iter_is_uncommitted_marker(iter);
+		}
+
 		private Gdk.Rectangle? on_commit_list_request_menu_position()
 		{
 			var selection = d_main.commit_list_view.get_selection();
@@ -945,6 +1086,11 @@ namespace GitgHistory
 				return null;
 			}
 
+			if (d_commit_list_model.iter_is_uncommitted_marker(iter))
+			{
+				return popup_menu_for_uncommitted_marker();
+			}
+
 			var commit = d_commit_list_model.commit_from_iter(iter);
 
 			if (commit == null)
@@ -977,6 +1123,12 @@ namespace GitgHistory
 				return null;
 			}
 
+			if (path_is_uncommitted_marker(path))
+			{
+				d_main.commit_list_view.get_selection().select_path(path);
+				return popup_menu_for_uncommitted_marker();
+			}
+
 			var commit = d_commit_list_model.commit_from_path(path);
 
 			if (commit == null)
@@ -1007,6 +1159,7 @@ namespace GitgHistory
 			add_ref_action(actions, new Gitg.RefActionCreateTag(application, af, reference));
 			add_ref_action(actions, new Gitg.RefActionCreatePatch(application, af, reference));
 			add_ref_action(actions, new Gitg.RefActionCheckout(application, af, reference));
+			add_ref_action(actions, new Gitg.RefActionStashPop(application, af, reference));
 			add_ref_action(actions, new Gitg.RefActionRename(application, af, reference));
 			add_ref_action(actions, new Gitg.RefActionDelete(application, af, reference));
 			add_ref_action(actions, new Gitg.RefActionCopyName(application, af, reference));

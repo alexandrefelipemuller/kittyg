@@ -57,6 +57,7 @@ sources = gitg_sources + files(
   'gitg-ref-action-fetch.vala',
   'gitg-ref-action-pull.vala',
   'gitg-ref-action-push.vala',
+  'gitg-ref-action-stash-pop.vala',
   'gitg-ref-action-tag-info.vala',
   'gitg-ref-action-rename.vala',
   'gitg-ref-action-set-upstream-branch.vala',

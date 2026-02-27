@@ -35,8 +35,11 @@ public class ActionSupport : Object
 
 	public async bool working_directory_dirty()
 	{
-		var options = new Ggit.StatusOptions(Ggit.StatusOption.EXCLUDE_SUBMODULES,
-		                                     Ggit.StatusShow.WORKDIR_ONLY,
+		var status_opts = Ggit.StatusOption.EXCLUDE_SUBMODULES |
+		                  Ggit.StatusOption.INCLUDE_UNTRACKED |
+		                  Ggit.StatusOption.RECURSE_UNTRACKED_DIRS;
+		var options = new Ggit.StatusOptions(status_opts,
+		                                     Ggit.StatusShow.INDEX_AND_WORKDIR,
 		                                     null);
 		var is_dirty = false;
 

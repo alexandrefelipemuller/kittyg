@@ -371,8 +371,11 @@ namespace Gitg
 				d_lanes.reset(permanent, incset);
 
 				var has_uncommitted_changes = false;
-				var status_options = new Ggit.StatusOptions(Ggit.StatusOption.EXCLUDE_SUBMODULES,
-				                                            Ggit.StatusShow.WORKDIR_ONLY,
+				var status_opts = Ggit.StatusOption.EXCLUDE_SUBMODULES |
+				                  Ggit.StatusOption.INCLUDE_UNTRACKED |
+				                  Ggit.StatusOption.RECURSE_UNTRACKED_DIRS;
+				var status_options = new Ggit.StatusOptions(status_opts,
+				                                            Ggit.StatusShow.INDEX_AND_WORKDIR,
 				                                            null);
 
 				try
