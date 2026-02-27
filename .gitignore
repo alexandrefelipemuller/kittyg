@@ -1,3 +1,5 @@
 /.venv/bin/
 /.venv/
 /msysroot/
+/pkgroot/
+/AGENTS.md
