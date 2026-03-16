@@ -1798,12 +1798,11 @@ namespace GitgCommit
 			return "/" + normalize_ignore_path(path);
 		}
 
-		private string? ignore_directory_pattern(string path)
+		private string? ignore_directory_path(string path)
 		{
 			var normalized = normalize_ignore_path(path);
 
-			// Ignore the repository top-level directory for this path.
-			var idx = normalized.index_of_char('/');
+			var idx = normalized.last_index_of_char('/');
 
 			if (idx < 0)
 			{
@@ -1817,7 +1816,51 @@ namespace GitgCommit
 				return null;
 			}
 
+			return dir;
+		}
+
+		private string? ignore_directory_pattern(string path)
+		{
+			var dir = ignore_directory_path(path);
+
+			if (dir == null)
+			{
+				return null;
+			}
+
 			return "/" + dir + "/";
+		}
+
+		private string? ignore_directory_pattern_from_user_input(string path)
+		{
+			var dir = ignore_directory_path(path);
+
+			if (dir == null)
+			{
+				return null;
+			}
+
+			var vars = new Gee.HashMap<string, string>();
+			vars["input-title"] = _("Ignore Directory");
+			vars["input-label"] = _("Directory path to ignore");
+			vars["input-yes"] = _("Ignore");
+			vars["input-text"] = dir;
+
+			var result = Gitg.Utils.run_entry_dialog(application as Gtk.Window, vars);
+
+			if (result == null)
+			{
+				return null;
+			}
+
+			var normalized = normalize_ignore_path(result);
+
+			if (normalized == "")
+			{
+				return null;
+			}
+
+			return "/" + normalized + "/";
 		}
 
 		private async bool append_ignore_patterns(owned string[] patterns) throws Error
@@ -1878,8 +1921,25 @@ namespace GitgCommit
 		{
 			var set = new Gee.HashSet<string>();
 
+			if (directory && items.length == 1)
+			{
+				var pattern = ignore_directory_pattern_from_user_input(items[0].path);
+
+				if (pattern == null || pattern == "")
+				{
+					return;
+				}
+
+				set.add(pattern);
+			}
+
 			foreach (var item in items)
 			{
+				if (directory && items.length == 1)
+				{
+					break;
+				}
+
 				string? pattern;
 
 				if (directory)

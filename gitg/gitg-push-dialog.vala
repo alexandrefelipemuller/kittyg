@@ -68,6 +68,7 @@ class PushDialog : Gtk.Dialog
 	private Gitg.Repository d_repository;
 	private Object d_reference;
 	private Gitg.Ref? d_remote_reference;
+	private bool d_reference_missing_upstream;
 	public bool smart {get { return d_smart.active;} set {d_smart.active = value;}}
 
 	construct
@@ -91,8 +92,10 @@ class PushDialog : Gtk.Dialog
 		var full_info_filled = (remote_name != null) && (remote_ref_name != "");
 		set_response_sensitive(Gtk.ResponseType.OK, full_info_filled);
 		var push_from_to_branches = d_local_ref_branch.active && d_remote_ref_branch.active;
-		if (push_from_to_branches) {
-			var remote_is_upstream_branch = false;
+		var remote_is_upstream_branch = false;
+
+		if (push_from_to_branches)
+		{
 			var r = d_reference as Gitg.Ref;
 			if (r != null)
 			{
@@ -106,7 +109,15 @@ class PushDialog : Gtk.Dialog
 					} catch {}
 				}
 			}
-			d_upstream.sensitive = full_info_filled && !remote_is_upstream_branch;
+		}
+
+		d_upstream.sensitive = push_from_to_branches &&
+		                       full_info_filled &&
+		                       !remote_is_upstream_branch;
+
+		if (!d_upstream.sensitive)
+		{
+			d_upstream.active = false;
 		}
 	}
 
@@ -137,7 +148,11 @@ class PushDialog : Gtk.Dialog
 				{
 					var upstream = branch.get_upstream();
 					d_remote_reference = upstream;
-				} catch {}
+				}
+				catch
+				{
+					d_reference_missing_upstream = true;
+				}
 				d_local_ref_branch.active = true;
 			} else if (r.is_tag())
 			{
@@ -239,6 +254,24 @@ class PushDialog : Gtk.Dialog
 		update_remote_entries();
 	}
 
+	private void select_default_remote_for_missing_upstream(string[] remotes)
+	{
+		if (remotes.length == 1)
+		{
+			d_remote_name.set_active_id(remotes[0]);
+			return;
+		}
+
+		foreach (var remote_name in remotes)
+		{
+			if (Gitg.Utils.is_main_remote(d_repository, remote_name))
+			{
+				d_remote_name.set_active_id(remote_name);
+				return;
+			}
+		}
+	}
+
 	private void update_remote_entries()
 	{
 		var r = d_reference as Gitg.Ref;
@@ -269,6 +302,8 @@ class PushDialog : Gtk.Dialog
 
 		if(d_remote_reference != null)
 			d_remote_name.set_active_id(d_remote_reference.parsed_name.remote_name);
+		else if (d_reference_missing_upstream)
+			select_default_remote_for_missing_upstream(remotes);
 		else if (smart && remotes.length == 1)
 			d_remote_name.set_active_id(remotes[0]);
 		else if (smart && remotes.length > 1)
@@ -278,6 +313,8 @@ class PushDialog : Gtk.Dialog
 				if (gremotes.contains(main_remote))
 					d_remote_name.set_active_id(main_remote);
 			} catch {}
+
+		d_upstream.active = d_reference_missing_upstream;
 	}
 
 	private void update_remote_ref_entries()
@@ -322,10 +359,10 @@ class PushDialog : Gtk.Dialog
 
 		if(d_remote_reference != null)
 			d_remote_ref_name.set_active_id(d_remote_reference.parsed_name.remote_branch);
-		else if (smart) {
+		else {
 			var r = d_reference as Gitg.Ref;
 			if (r != null)
-				if (r.is_branch() || r.is_tag())
+				if (r.is_branch() || (smart && r.is_tag()))
 					entry.set_text(r.parsed_name.shortname);
 		}
 	}

@@ -18,7 +18,7 @@
             <property name="can_focus">True</property>
             <property name="has_focus">True</property>
             <property name="fixed-height-mode">True</property>
-            <property name="headers-visible">False</property>
+            <property name="headers-visible">True</property>
             <property name="enable-search">False</property>
             <child>
               <object class="GtkTreeViewColumn" id="column_commit_list_subject">
