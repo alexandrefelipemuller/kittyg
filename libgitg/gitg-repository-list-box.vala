@@ -54,6 +54,8 @@ namespace Gitg
 			[GtkChild]
 			private unowned Gtk.Label d_branch_label;
 			[GtkChild]
+			private unowned Gtk.Label d_path_label;
+			[GtkChild]
 			private unowned Gtk.Spinner d_spinner;
 			[GtkChild]
 			private unowned Gtk.CheckButton d_remove_check_button;
@@ -156,20 +158,11 @@ namespace Gitg
 
 			private void update_branch_label()
 			{
-				if (d_branch_name == null || d_branch_name == "")
-				{
-					// Translators: this is used to construct: "at <directory>", to indicate where the repository is at.
-					d_branch_label.label = _("at %s").printf(d_dirname);
-				}
-				else if (d_dirname == null || d_dirname == "")
-				{
-					d_branch_label.label = d_branch_name;
-				}
-				else
-				{
-					// Translators: this is used to construct: "<branch-name> at <directory>"
-					d_branch_label.label = _("%s at %s").printf(d_branch_name, d_dirname);
-				}
+				d_branch_label.label = d_branch_name ?? "";
+				d_branch_label.visible = d_branch_label.label != "";
+
+				d_path_label.label = d_dirname ?? "";
+				d_path_label.visible = d_path_label.label != "";
 			}
 
 			private void update_repository_data()

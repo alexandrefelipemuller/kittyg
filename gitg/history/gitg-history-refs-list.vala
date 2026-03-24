@@ -131,6 +131,7 @@ private class RefRow : RefTyped, Gtk.ListBoxRow
 		{
 			d_icon.icon_name = "object-select-symbolic";
 			d_icon.show();
+			get_style_context().add_class("current-context");
 		}
 
 		if (reference != null)

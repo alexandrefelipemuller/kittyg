@@ -79,18 +79,19 @@ public class AnsiRenderer {
 		return t;
 	}
 
-	public void render_ansi (string s) {
-		buf.set_text ("");
+		public void render_ansi (string s) {
+			buf.set_text ("");
 
-		int len = s.length;
-		int p = 0;
+			int len = s.length;
+			int p = 0;
+			const string esc = "\x1b";
 
 		bool bold = false;
 		bool underline = false;
 		int fg = -1;
 
 		while (p < len) {
-			int escpos = s.index_of ("\u001b", p);
+				int escpos = s.index_of (esc, p);
 			if (escpos < 0) {
 				// no more escapes — insert remainder
 				string seg = s.substring (p, len - p);
@@ -147,7 +148,7 @@ public class AnsiRenderer {
 			} else {
 				print("unsupported ");
 				// not a supported escape sequence, insert ESC as literal
-				insert_with_tag ("\u001b", bold, underline, fg);
+					insert_with_tag (esc, bold, underline, fg);
 				p = escpos + 1;
 			}
 		}

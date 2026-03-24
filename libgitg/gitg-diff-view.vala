@@ -56,6 +56,68 @@ public class Gitg.DiffView : Gtk.Grid
 
 	private uint d_reveal_options_timeout;
 	private uint d_unreveal_options_timeout;
+	private uint d_render_idle_id;
+
+	private class PreparedHunk : Object
+	{
+		public Ggit.DiffHunk hunk;
+		public Gee.ArrayList<Ggit.DiffLine> lines;
+
+		public PreparedHunk(Ggit.DiffHunk hunk, Gee.ArrayList<Ggit.DiffLine> lines)
+		{
+			this.hunk = hunk;
+			this.lines = lines;
+		}
+	}
+
+	private class PreparedFile : Object
+	{
+		public DiffViewFileInfo info;
+		public bool can_diff_as_image;
+		public bool can_diff_as_text;
+		public bool use_binary_renderer;
+		public Gee.ArrayList<PreparedHunk> hunks;
+
+		public PreparedFile(DiffViewFileInfo info)
+		{
+			this.info = info;
+			hunks = new Gee.ArrayList<PreparedHunk>();
+		}
+	}
+
+	private class PreparedDiff : Object
+	{
+		public Gee.ArrayList<PreparedFile> files;
+		public int maxlines;
+
+		public PreparedDiff()
+		{
+			files = new Gee.ArrayList<PreparedFile>();
+		}
+	}
+
+	private class RenderState : Object
+	{
+		public PreparedDiff prepared;
+		public Gee.HashSet<string> was_expanded;
+		public bool preserve_expanded;
+		public Cancellable? cancellable;
+		public int file_index;
+		public int hunk_index;
+		public PreparedFile? current_prepared_file;
+		public DiffViewFile? current_file;
+
+		public RenderState(PreparedDiff prepared,
+		                   Gee.HashSet<string> was_expanded,
+		                   bool preserve_expanded,
+		                   Cancellable? cancellable)
+		{
+			this.prepared = prepared;
+			this.was_expanded = was_expanded;
+			this.preserve_expanded = preserve_expanded;
+			this.cancellable = cancellable;
+		}
+	}
 
 	private static Gee.HashSet<string> s_image_mime_types;
 
@@ -226,6 +288,8 @@ public class Gitg.DiffView : Gtk.Grid
 
 	public override void dispose()
 	{
+		cancel_render_job();
+
 		if (d_cancellable != null)
 		{
 			d_cancellable.cancel();
@@ -540,6 +604,7 @@ public class Gitg.DiffView : Gtk.Grid
 		// Cancel running operations
 		d_cancellable.cancel();
 		d_cancellable = new Cancellable();
+		cancel_render_job();
 
 		if (d_commit != null)
 		{
@@ -672,6 +737,15 @@ public class Gitg.DiffView : Gtk.Grid
 
 	private delegate void Anon();
 
+	private void cancel_render_job()
+	{
+		if (d_render_idle_id != 0)
+		{
+			Source.remove(d_render_idle_id);
+			d_render_idle_id = 0;
+		}
+	}
+
 	private string key_for_delta(Ggit.DiffDelta delta)
 	{
 		var new_file = delta.get_new_file();
@@ -703,7 +777,16 @@ public class Gitg.DiffView : Gtk.Grid
 			if (nqueries == 0 && finished && (cancellable == null || !cancellable.is_cancelled()))
 			{
 				finished = false;
-				update_diff_hunks(diff, preserve_expanded, infomap, cancellable);
+				prepare_diff.begin(diff, preserve_expanded, infomap, cancellable, (obj, res) => {
+					var prepared = prepare_diff.end(res);
+
+					if (prepared == null || (cancellable != null && cancellable.is_cancelled()))
+					{
+						return;
+					}
+
+					update_diff_hunks(prepared, preserve_expanded, cancellable);
+				});
 			}
 		};
 
@@ -730,24 +813,158 @@ public class Gitg.DiffView : Gtk.Grid
 		check_finish();
 	}
 
-	private void update_diff_hunks(Ggit.Diff diff, bool preserve_expanded, Gee.HashMap<string, DiffViewFileInfo> infomap, Cancellable? cancellable)
+	private string? mime_type_for_info(DiffViewFileInfo info, Ggit.DiffDelta delta)
 	{
-		var files = new Gee.ArrayList<Gitg.DiffViewFile>();
+		if (info.new_file_content_type != null)
+		{
+			return ContentType.get_mime_type(info.new_file_content_type);
+		}
 
-		Gitg.DiffViewFile? current_file = null;
-		Ggit.DiffHunk? current_hunk = null;
+		var oldpath = delta.get_old_file().get_path();
+
+		if (oldpath == null)
+		{
+			return null;
+		}
+
+		bool uncertain;
+		var ctype = ContentType.guess(Path.get_basename(oldpath), null, out uncertain);
+		return ctype != null ? ContentType.get_mime_type(ctype) : null;
+	}
+
+	private PreparedFile? prepare_textconv_file(Ggit.DiffDelta                       delta,
+	                                            Gee.HashMap<string, DiffViewFileInfo> infomap,
+	                                            Cancellable?                          cancellable,
+	                                            ref int                               maxlines)
+	{
+		var local_maxlines = maxlines;
+
+		try
+		{
+			var new_file = delta.get_new_file();
+			var old_file = delta.get_old_file();
+
+			if (!TextConv.has_textconv_command(repository, old_file) &&
+			    !TextConv.has_textconv_command(repository, new_file))
+			{
+				return null;
+			}
+
+			uint8[] n_textconv = TextConv.get_textconv_content(repository, new_file);
+			uint8[] o_textconv = TextConv.get_textconv_content(repository, old_file);
+
+			var opts = new Ggit.DiffOptions();
+			opts.flags = Ggit.DiffOption.INCLUDE_UNTRACKED |
+			             Ggit.DiffOption.IGNORE_WHITESPACE |
+			             Ggit.DiffOption.DISABLE_PATHSPEC_MATCH |
+			             Ggit.DiffOption.RECURSE_UNTRACKED_DIRS;
+			opts.n_context_lines = 3;
+			opts.n_interhunk_lines = 3;
+
+			var bdiff = new Ggit.Diff.buffers(o_textconv,
+			                                  old_file.get_path(),
+			                                  n_textconv,
+			                                  new_file.get_path(),
+			                                  opts);
+
+			PreparedFile? prepared_file = null;
+			PreparedHunk? current_hunk = null;
+			Gee.ArrayList<Ggit.DiffLine>? current_lines = null;
+
+			Anon add_hunk = () => {
+				if (prepared_file != null && current_hunk != null)
+				{
+					prepared_file.hunks.add(current_hunk);
+					current_hunk = null;
+					current_lines = null;
+				}
+			};
+
+			bdiff.foreach(
+				(bdelta, progress) => {
+					if (cancellable != null && cancellable.is_cancelled())
+					{
+						return 1;
+					}
+
+					add_hunk();
+
+					var deltakey = key_for_delta(bdelta);
+					DiffViewFileInfo info;
+
+					if (infomap.has_key(deltakey))
+					{
+						info = infomap[deltakey];
+					}
+					else
+					{
+						info = new DiffViewFileInfo(repository, bdelta, new_is_workdir);
+					}
+
+					prepared_file = new PreparedFile(info);
+					prepared_file.can_diff_as_text = true;
+					return 0;
+				},
+				(bdelta, binary) => {
+					return (cancellable != null && cancellable.is_cancelled()) ? 1 : 0;
+				},
+				(bdelta, hunk) => {
+					if (cancellable != null && cancellable.is_cancelled())
+					{
+						return 1;
+					}
+
+					local_maxlines = int.max(local_maxlines, hunk.get_old_start() + hunk.get_old_lines());
+					local_maxlines = int.max(local_maxlines, hunk.get_new_start() + hunk.get_new_lines());
+
+					add_hunk();
+
+					current_lines = new Gee.ArrayList<Ggit.DiffLine>();
+					current_hunk = new PreparedHunk(hunk, current_lines);
+					return 0;
+				},
+				(bdelta, hunk, line) => {
+					if (cancellable != null && cancellable.is_cancelled())
+					{
+						return 1;
+					}
+
+					if (current_lines != null)
+					{
+						current_lines.add(line);
+					}
+
+					return 0;
+				}
+			);
+
+			add_hunk();
+			maxlines = local_maxlines;
+			return prepared_file;
+		}
+		catch (Error e)
+		{
+			stderr.printf(@"Error: $(e.message)\n");
+			return null;
+		}
+	}
+
+	private PreparedDiff? prepare_diff_model(Ggit.Diff                         diff,
+	                                         Gee.HashMap<string, DiffViewFileInfo> infomap,
+	                                         Cancellable?                      cancellable)
+	{
+		var prepared = new PreparedDiff();
+		PreparedFile? current_file = null;
+		PreparedHunk? current_hunk = null;
 		Gee.ArrayList<Ggit.DiffLine>? current_lines = null;
 		var current_is_binary = false;
 
-		var maxlines = 0;
-
 		Anon add_hunk = () => {
-			if (current_hunk != null)
+			if (current_file != null && current_hunk != null)
 			{
-				current_file.add_hunk(current_hunk, current_lines);
-
-				current_lines = null;
+				current_file.hunks.add(current_hunk);
 				current_hunk = null;
+				current_lines = null;
 			}
 		};
 
@@ -756,10 +973,7 @@ public class Gitg.DiffView : Gtk.Grid
 
 			if (current_file != null)
 			{
-				current_file.show();
-
-				files.add(current_file);
-
+				prepared.files.add(current_file);
 				current_file = null;
 			}
 		};
@@ -775,8 +989,8 @@ public class Gitg.DiffView : Gtk.Grid
 
 					add_file();
 
-					DiffViewFileInfo? info = null;
 					var deltakey = key_for_delta(delta);
+					DiffViewFileInfo info;
 
 					if (infomap.has_key(deltakey))
 					{
@@ -794,195 +1008,70 @@ public class Gitg.DiffView : Gtk.Grid
 					// bytes. E.g. PDF
 					var known_binary_files_types = new string[] {"application/pdf"};
 
-					// Ignore binary based on content type
-					if (info != null && info.new_file_content_type in known_binary_files_types)
+					if (info.new_file_content_type in known_binary_files_types)
 					{
 						current_is_binary = true;
 					}
 
-					string? mime_type_for_image = null;
-
-					if (info == null || info.new_file_content_type == null)
-					{
-						// Guess mime type from old file name in the case of a deleted file
-						var oldpath = delta.get_old_file().get_path();
-
-						if (oldpath != null)
-						{
-							bool uncertain;
-							var ctype = ContentType.guess(Path.get_basename(oldpath), null, out uncertain);
-
-							if (ctype != null)
-							{
-								mime_type_for_image = ContentType.get_mime_type(ctype);
-							}
-						}
-					}
-					else
-					{
-						mime_type_for_image = ContentType.get_mime_type(info.new_file_content_type);
-					}
-
+					var mime_type_for_image = mime_type_for_info(info, delta);
 					bool can_diff_as_image = mime_type_for_image != null && s_image_mime_types.contains(mime_type_for_image);
 					bool can_diff_as_text = ContentType.is_mime_type(mime_type_for_image, "text/plain");
 
-					current_file = new Gitg.DiffViewFile(info);
-
-					if (can_diff_as_image)
-					{
-						current_file.add_image_renderer();
-					}
 					if (!can_diff_as_image && !current_is_binary && !can_diff_as_text)
 					{
-							//force diff as text if no other diff is possible
-							can_diff_as_text = true;
+						can_diff_as_text = true;
 					}
-					if (can_diff_as_text)
-					{
-						current_file.add_text_renderer(handle_selection);
-						var renderer_list = current_file.renderer_list;
-						foreach (DiffViewFileRenderer renderer in renderer_list)
-						{
-							var renderer_text = renderer as DiffViewFileRendererTextable;
-							if (renderer_text != null)
-							{
-								bind_property("highlight", renderer_text, "highlight", BindingFlags.SYNC_CREATE);
-								bind_property("wrap-lines", renderer_text, "wrap-lines", BindingFlags.DEFAULT | BindingFlags.SYNC_CREATE);
-								bind_property("tab-width", renderer_text, "tab-width", BindingFlags.DEFAULT | BindingFlags.SYNC_CREATE);
-								renderer_text.maxlines = maxlines;
-								renderer_text.notify["has-selection"].connect(on_selection_changed);
-							}
-						}
-						on_selection_changed();
-					}
+
+					current_file = new PreparedFile(info);
+					current_file.can_diff_as_image = can_diff_as_image;
+					current_file.can_diff_as_text = can_diff_as_text;
+					current_file.use_binary_renderer = current_is_binary;
+
 					if (current_is_binary)
 					{
-						try {
-							var new_file = delta.get_new_file();
-							var old_file = delta.get_old_file();
+						var textconv_file = prepare_textconv_file(delta,
+						                                         infomap,
+						                                         cancellable,
+						                                         ref prepared.maxlines);
 
-							if (TextConv.has_textconv_command(repository, old_file) || TextConv.has_textconv_command(repository, new_file))
-							{
-								uint8[] n_textconv = TextConv.get_textconv_content(repository, new_file);
-								uint8[] o_textconv = TextConv.get_textconv_content(repository, old_file);
-
-								current_is_binary = false;
-								var opts = new Ggit.DiffOptions();
-								opts.flags = Ggit.DiffOption.INCLUDE_UNTRACKED |
-											Ggit.DiffOption.IGNORE_WHITESPACE |
-											Ggit.DiffOption.DISABLE_PATHSPEC_MATCH |
-											Ggit.DiffOption.RECURSE_UNTRACKED_DIRS;
-								opts.n_context_lines = 3;
-								opts.n_interhunk_lines = 3;
-
-
-								var bdiff = new Ggit.Diff.buffers(o_textconv, old_file.get_path(), n_textconv, new_file.get_path(), opts);
-								bdiff.foreach(
-									(delta, progress) => {
-											if (cancellable != null && cancellable.is_cancelled())
-											{
-												return 1;
-											}
-											deltakey = key_for_delta(delta);
-
-											if (infomap.has_key(deltakey))
-											{
-												info = infomap[deltakey];
-											}
-											else
-											{
-												info = new DiffViewFileInfo(repository, delta, new_is_workdir);
-											}
-												current_file = new Gitg.DiffViewFile(info);
-												current_file.add_text_renderer(handle_selection);
-												return 0;
-											},
-									(delta, binary) => {
-											if (cancellable != null && cancellable.is_cancelled())
-											{
-												return 1;
-											}
-											return 0;
-									},
-									(delta, hunk) => {
-											if (cancellable != null && cancellable.is_cancelled())
-											{
-												return 1;
-											}
-											if (!current_is_binary)
-											{
-												maxlines = int.max(maxlines, hunk.get_old_start() + hunk.get_old_lines());
-												maxlines = int.max(maxlines, hunk.get_new_start() + hunk.get_new_lines());
-
-												add_hunk();
-
-												current_hunk = hunk;
-												current_lines = new Gee.ArrayList<Ggit.DiffLine>();
-											}
-
-											return 0;
-									},
-									(delta, hunk, line) => {
-											if (cancellable != null && cancellable.is_cancelled())
-											{
-												return 1;
-											}
-											if (!current_is_binary)
-											{
-												current_lines.add(line);
-											}
-											return 0;
-									}
-								);
-								add_hunk();
-								add_file();
-							}
-						} catch (Error error) {
-							stderr.printf (@"Error: $(error.message)\n");
+						if (textconv_file != null)
+						{
+							current_file = textconv_file;
+							current_is_binary = false;
 						}
-						if (current_is_binary)
-							current_file.add_binary_renderer();
 					}
+
 					return 0;
 				},
-
 				(delta, binary) => {
-					// FIXME: do we want to handle binary data?
-					if (cancellable != null && cancellable.is_cancelled())
-					{
-						return 1;
-					}
-
-					return 0;
+					return (cancellable != null && cancellable.is_cancelled()) ? 1 : 0;
 				},
-
 				(delta, hunk) => {
 					if (cancellable != null && cancellable.is_cancelled())
 					{
 						return 1;
 					}
 
-					if (!current_is_binary)
+					if (!current_is_binary && current_file != null && current_file.can_diff_as_text)
 					{
-						maxlines = int.max(maxlines, hunk.get_old_start() + hunk.get_old_lines());
-						maxlines = int.max(maxlines, hunk.get_new_start() + hunk.get_new_lines());
+						prepared.maxlines = int.max(prepared.maxlines, hunk.get_old_start() + hunk.get_old_lines());
+						prepared.maxlines = int.max(prepared.maxlines, hunk.get_new_start() + hunk.get_new_lines());
 
 						add_hunk();
 
-						current_hunk = hunk;
 						current_lines = new Gee.ArrayList<Ggit.DiffLine>();
+						current_hunk = new PreparedHunk(hunk, current_lines);
 					}
 
 					return 0;
 				},
-
 				(delta, hunk, line) => {
 					if (cancellable != null && cancellable.is_cancelled())
 					{
 						return 1;
 					}
 
-					if (!current_is_binary)
+					if (!current_is_binary && current_lines != null)
 					{
 						current_lines.add(line);
 					}
@@ -990,10 +1079,154 @@ public class Gitg.DiffView : Gtk.Grid
 					return 0;
 				}
 			);
-		} catch {}
+		}
+		catch {}
 
-		add_hunk();
+		if (cancellable != null && cancellable.is_cancelled())
+		{
+			return null;
+		}
+
 		add_file();
+		return prepared;
+	}
+
+	private async PreparedDiff? prepare_diff(Ggit.Diff                         diff,
+	                                         bool                              preserve_expanded,
+	                                         Gee.HashMap<string, DiffViewFileInfo> infomap,
+	                                         Cancellable?                      cancellable)
+	{
+		PreparedDiff? prepared = null;
+
+		try
+		{
+			yield Gitg.Async.thread(() => {
+				prepared = prepare_diff_model(diff, infomap, cancellable);
+			});
+		}
+		catch
+		{
+			return null;
+		}
+
+		if (cancellable != null && cancellable.is_cancelled())
+		{
+			return null;
+		}
+
+		return prepared;
+	}
+
+	private void bind_text_renderer(DiffViewFileRenderer renderer, int maxlines)
+	{
+		var renderer_text = renderer as DiffViewFileRendererTextable;
+
+		if (renderer_text == null)
+		{
+			return;
+		}
+
+		bind_property("highlight", renderer_text, "highlight", BindingFlags.SYNC_CREATE);
+		bind_property("wrap-lines", renderer_text, "wrap-lines", BindingFlags.DEFAULT | BindingFlags.SYNC_CREATE);
+		bind_property("tab-width", renderer_text, "tab-width", BindingFlags.DEFAULT | BindingFlags.SYNC_CREATE);
+		renderer_text.maxlines = maxlines;
+		renderer_text.notify["has-selection"].connect(on_selection_changed);
+	}
+
+	private DiffViewFile create_prepared_file_widget(PreparedFile prepared_file,
+	                                                 PreparedDiff prepared,
+	                                                 RenderState  state)
+	{
+		var file = new Gitg.DiffViewFile(prepared_file.info);
+
+		if (prepared_file.can_diff_as_image)
+		{
+			file.add_image_renderer();
+		}
+
+		if (prepared_file.can_diff_as_text)
+		{
+			file.add_text_renderer(handle_selection);
+
+			foreach (var renderer in file.renderer_list)
+			{
+				bind_text_renderer(renderer, prepared.maxlines);
+			}
+		}
+
+		if (prepared_file.use_binary_renderer)
+		{
+			file.add_binary_renderer();
+		}
+
+		var path = primary_path(file.info.delta);
+		file.expanded = d_commit_details.expanded || (path != null && state.was_expanded.contains(path));
+		file.vexpand = (state.file_index == prepared.files.size - 1);
+
+		d_grid_files.add(file);
+		file.show();
+		file.notify["expanded"].connect(auto_update_expanded);
+
+		return file;
+	}
+
+	private bool render_prepared_diff_chunk(RenderState state)
+	{
+		const int max_hunks_per_chunk = 8;
+		var hunks_rendered = 0;
+
+		while (state.file_index < state.prepared.files.size)
+		{
+			if (state.cancellable != null && state.cancellable.is_cancelled())
+			{
+				d_render_idle_id = 0;
+				return false;
+			}
+
+			if (state.current_file == null)
+			{
+				state.current_prepared_file = state.prepared.files[state.file_index];
+				state.current_file = create_prepared_file_widget(state.current_prepared_file,
+				                                                state.prepared,
+				                                                state);
+				state.hunk_index = 0;
+
+				if (!state.current_prepared_file.can_diff_as_text ||
+				    state.current_prepared_file.hunks.size == 0)
+				{
+					state.current_prepared_file = null;
+					state.current_file = null;
+					state.file_index++;
+					continue;
+				}
+			}
+
+			while (state.hunk_index < state.current_prepared_file.hunks.size)
+			{
+				var prepared_hunk = state.current_prepared_file.hunks[state.hunk_index];
+				state.current_file.add_hunk(prepared_hunk.hunk, prepared_hunk.lines);
+				state.hunk_index++;
+				hunks_rendered++;
+
+				if (hunks_rendered >= max_hunks_per_chunk)
+				{
+					return true;
+				}
+			}
+
+			state.current_prepared_file = null;
+			state.current_file = null;
+			state.file_index++;
+		}
+
+		d_render_idle_id = 0;
+		on_selection_changed();
+		return false;
+	}
+
+	private void update_diff_hunks(PreparedDiff prepared, bool preserve_expanded, Cancellable? cancellable)
+	{
+		cancel_render_job();
 
 		var file_widgets = d_grid_files.get_children();
 		var was_expanded = new Gee.HashSet<string>();
@@ -1015,25 +1248,17 @@ public class Gitg.DiffView : Gtk.Grid
 			f.destroy();
 		}
 
-		d_commit_details.expanded = (files.size <= 1 || !default_collapse_all);
-		d_commit_details.expander_visible = (files.size > 1);
+		d_commit_details.expanded = (prepared.files.size <= 1 || !default_collapse_all);
+		d_commit_details.expander_visible = (prepared.files.size > 1);
 
-		for (var i = 0; i < files.size; i++)
+		var state = new RenderState(prepared, was_expanded, preserve_expanded, cancellable);
+
+		if (!render_prepared_diff_chunk(state))
 		{
-			var file = files[i];
-			var path = primary_path(file.info.delta);
-
-			file.expanded = d_commit_details.expanded || (path != null && was_expanded.contains(path));
-
-			if (i == files.size - 1)
-			{
-				file.vexpand = true;
-			}
-
-			d_grid_files.add(file);
-
-			file.notify["expanded"].connect(auto_update_expanded);
+			return;
 		}
+
+		d_render_idle_id = Idle.add(() => render_prepared_diff_chunk(state));
 	}
 
 	private void auto_update_expanded()

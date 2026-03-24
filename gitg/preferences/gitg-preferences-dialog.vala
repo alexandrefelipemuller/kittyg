@@ -23,6 +23,7 @@ namespace Gitg
 class PreferencesDialog : Gtk.Dialog, Gtk.Buildable
 {
 	private Gtk.Notebook d_notebook;
+	private bool d_populated;
 
 	private void parser_finished(Gtk.Builder builder)
 	{
@@ -59,6 +60,11 @@ class PreferencesDialog : Gtk.Dialog, Gtk.Buildable
 
 	public void populate()
 	{
+		if (d_populated)
+		{
+			return;
+		}
+
 		var engine = PluginsEngine.get_default();
 		var ext = new Peas.ExtensionSet(engine, typeof(GitgExt.Preferences));
 
@@ -72,6 +78,8 @@ class PreferencesDialog : Gtk.Dialog, Gtk.Buildable
 		ext.foreach((s, info, e) => {
 			add_page(e as GitgExt.Preferences, pages);
 		});
+
+		d_populated = true;
 	}
 }
 

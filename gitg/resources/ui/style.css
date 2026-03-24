@@ -33,6 +33,80 @@
 @define-color aluminium5 #555753;
 @define-color aluminium6 #2e3436;
 
+@define-color kittyg_bg_app #F5F3EF;
+@define-color kittyg_surface_main #FFFFFF;
+@define-color kittyg_surface_secondary #EEE9E2;
+@define-color kittyg_border #D8D0C6;
+@define-color kittyg_divider #E7E1D8;
+
+@define-color kittyg_text_primary #1F2328;
+@define-color kittyg_text_secondary #4B5563;
+@define-color kittyg_text_tertiary #6B7280;
+@define-color kittyg_text_disabled #9CA3AF;
+
+@define-color kittyg_accent #D95F0E;
+@define-color kittyg_accent_hover #B94F0A;
+@define-color kittyg_accent_pressed #963F07;
+@define-color kittyg_accent_soft #FBE7D8;
+
+@define-color kittyg_focus_ring #0F6CBD;
+@define-color kittyg_focus_fill #DCEBFA;
+@define-color kittyg_pressed_surface #E3DBD1;
+
+GitgWindow {
+	background-color: @kittyg_bg_app;
+	color: @kittyg_text_primary;
+}
+
+GitgWindow > grid,
+GitgWindow > grid > overlay > grid {
+	background-color: @kittyg_bg_app;
+}
+
+GitgWindow GtkScrolledWindow.sidebar,
+GitgWindow GitgRepositoryListBox,
+GitgWindow GitgHistoryRefsList,
+GitgWindow GitgCommitSidebar {
+	background-color: @kittyg_surface_main;
+	color: @kittyg_text_primary;
+}
+
+#repository_list_frame {
+	background-color: transparent;
+	border: 0;
+}
+
+#repository_list_box {
+	background-color: transparent;
+}
+
+GitgWindow GtkHeaderBar.titlebar {
+	background-color: @kittyg_surface_secondary;
+	border-bottom: 1px solid @kittyg_border;
+	color: @kittyg_text_primary;
+}
+
+GitgWindow GtkSeparator,
+GitgWindow separator {
+	color: @kittyg_divider;
+}
+
+GitgWindow label {
+	color: @kittyg_text_primary;
+}
+
+GitgWindow label.dim-label,
+GitgWindow .repository-description,
+GitgWindow .branch-label,
+GitgWindow .sha1-label {
+	color: @kittyg_text_secondary;
+}
+
+GitgWindow *:disabled,
+GitgWindow label:disabled {
+	color: @kittyg_text_disabled;
+}
+
 GtkToolbar#toolbar_topnav, GtkToolbar#toolbar_subnav {
 	border-left: 0px;
 	border-right: 0px;
@@ -53,9 +127,9 @@ GitgCreateTagDialog GtkTextView:disabled {
 .sidebar-paned.pane-separator:hover {
 	border-width: 0 1px 0 0;
 	border-style: solid;
-	border-color: @borders;
-	background-color: @sidebar_bg;
-	color: shade (@theme_bg_color, 0.9);
+	border-color: @kittyg_border;
+	background-color: @kittyg_surface_main;
+	color: @kittyg_text_secondary;
 }
 
 .panels-paned.pane-separator,
@@ -67,8 +141,8 @@ GitgCreateTagDialog GtkTextView:disabled {
 .panels-paned.pane-separator:hover:backdrop,
 .sidebar-paned.pane-separator:backdrop,
 .sidebar-paned.pane-separator:hover:backdrop {
-	border-color: @unfocused_borders;
-	background-color: @sidebar_bg_unfocused;
+	border-color: @kittyg_divider;
+	background-color: @kittyg_surface_secondary;
 }
 
 GitgHistoryPaned GtkEntry.ref_editing_entry {
@@ -81,15 +155,15 @@ GitgHistoryPaned GtkEntry.ref_editing_entry:selected {
 }
 
 .progress-bin {
-	background-color: shade (@theme_bg_color, 0.9);
+	background-color: @kittyg_surface_secondary;
 }
 
 .list-row .progress-bin {
-	background-color: shade (@theme_base_color, 0.9);
+	background-color: @kittyg_surface_main;
 }
 
 .list-row:selected .progress-bin {
-	background-color: shade (@theme_selected_bg_color, 1.2);
+	background-color: @kittyg_accent_soft;
 }
 
 .branch, .remote, .tag, .stash {
@@ -118,6 +192,137 @@ GitgHistoryRefRow {
 	border: 0;
 }
 
+/* State hierarchy for repository and sidebar rows:
+ * hover < selected < keyboard focus, while current context is persistent. */
+GitgRepositoryListBoxRow:hover .progress-bin,
+GitgHistoryRefRow:hover,
+GitgHistoryRefHeader:hover {
+	background-color: @kittyg_surface_secondary;
+}
+
+GitgRepositoryListBoxRow {
+	margin: 0 0 6px 0;
+}
+
+GitgRepositoryListBoxRow .progress-bin {
+	border: 1px solid @kittyg_divider;
+	border-radius: 6px;
+	background-color: @kittyg_surface_main;
+}
+
+GitgRepositoryListBoxRow:selected .progress-bin,
+GitgHistoryRefRow:selected,
+GitgHistoryRefHeader:selected {
+	background-color: @kittyg_accent_soft;
+	border-left: 3px solid @kittyg_accent;
+	color: @kittyg_text_primary;
+}
+
+GitgRepositoryListBoxRow:selected .repository-title,
+GitgHistoryRefRow:selected .ref-title {
+	font-weight: 700;
+}
+
+GitgRepositoryListBoxRow:selected .repository-description,
+GitgHistoryRefRow:selected .dim-label {
+	opacity: 0.85;
+}
+
+.project-title {
+	font-size: 18px;
+	font-weight: 600;
+	color: @kittyg_text_primary;
+}
+
+.project-branch {
+	font-size: 14px;
+	font-weight: 500;
+	color: @kittyg_text_secondary;
+	font-style: normal;
+	margin-top: 4px;
+}
+
+.project-path {
+	font-size: 12px;
+	font-weight: 400;
+	color: @kittyg_text_tertiary;
+	margin-top: 2px;
+}
+
+GitgRepositoryListBoxRow:selected .project-branch,
+GitgRepositoryListBoxRow:selected .project-path {
+	color: @kittyg_text_primary;
+	opacity: 0.92;
+}
+
+GitgRepositoryListBoxRow:focus,
+GitgHistoryRefRow:focus,
+GitgHistoryRefHeader:focus {
+	outline: 2px solid @kittyg_focus_ring;
+	outline-offset: -2px;
+	box-shadow: inset 0 0 0 2px @kittyg_focus_fill;
+}
+
+GitgRepositoryListBoxRow:focus .progress-bin {
+	border-color: @kittyg_focus_ring;
+}
+
+GitgHistoryRefRow.current-context {
+	border-left: 3px solid alpha(@kittyg_accent, 0.55);
+}
+
+GitgHistoryRefRow.current-context .ref-title {
+	font-weight: 600;
+}
+
+GitgHistoryRefRow.current-context:selected {
+	border-left-color: @kittyg_accent;
+}
+
+GitgWindow button,
+GitgWindow .button {
+	background-color: @kittyg_surface_main;
+	border: 1px solid @kittyg_border;
+	color: @kittyg_text_primary;
+}
+
+GitgWindow button:hover,
+GitgWindow .button:hover {
+	background-color: @kittyg_surface_secondary;
+	border-color: @kittyg_border;
+}
+
+GitgWindow button:active,
+GitgWindow .button:active {
+	background-color: @kittyg_pressed_surface;
+}
+
+GitgWindow button.suggested-action,
+GitgWindow .suggested-action {
+	background-color: @kittyg_accent;
+	border-color: @kittyg_accent_pressed;
+	color: #FFFFFF;
+}
+
+GitgWindow button.suggested-action:hover,
+GitgWindow .suggested-action:hover {
+	background-color: @kittyg_accent_hover;
+}
+
+GitgWindow button.suggested-action:active,
+GitgWindow .suggested-action:active {
+	background-color: @kittyg_accent_pressed;
+}
+
+GitgWindow button:focus,
+GitgWindow .button:focus,
+GitgWindow entry:focus,
+GitgWindow treeview:focus,
+GitgWindow list:focus {
+	outline: 2px solid @kittyg_focus_ring;
+	outline-offset: -2px;
+}
+
 .title-label {
 	font-weight: bold;
 }
@@ -134,11 +339,11 @@ GitgHistoryRefRow {
 
 .sha1-label {
 	font-size: 0.8em;
-	color: @insensitive_fg_color;
+	color: @kittyg_text_tertiary;
 	font-family: monospace;
 }
 
 .notifications {
-	background-color: @theme_bg_color;
-	border-top: 1px solid @borders;
+	background-color: @kittyg_surface_secondary;
+	border-top: 1px solid @kittyg_border;
 }

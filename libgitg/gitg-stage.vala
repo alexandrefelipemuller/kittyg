@@ -1101,10 +1101,17 @@ public class Stage : Object
 			tree = yield get_head_tree();
 		}
 
-		return new Ggit.Diff.tree_to_index(d_repository,
-		                                   tree,
-		                                   d_repository.get_index(),
-		                                   opts);
+		var index = d_repository.get_index();
+		Ggit.Diff? diff = null;
+
+		yield Async.thread(() => {
+			diff = new Ggit.Diff.tree_to_index(d_repository,
+			                                   tree,
+			                                   index,
+			                                   opts);
+		});
+
+		return diff;
 	}
 
 	public async Ggit.Diff? diff_index(StageStatusItem   f,
@@ -1146,9 +1153,16 @@ public class Stage : Object
 			opts.new_prefix = defopts.new_prefix;
 		}
 
-		return new Ggit.Diff.index_to_workdir(d_repository,
-		                                      d_repository.get_index(),
-		                                      opts);
+		var index = d_repository.get_index();
+		Ggit.Diff? diff = null;
+
+		yield Async.thread(() => {
+			diff = new Ggit.Diff.index_to_workdir(d_repository,
+			                                      index,
+			                                      opts);
+		});
+
+		return diff;
 	}
 
 	public async Ggit.Diff? diff_workdir(StageStatusItem   f,

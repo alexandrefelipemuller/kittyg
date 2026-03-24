@@ -828,7 +828,7 @@ class Dialog : Gtk.Dialog
 			}
 		}
 		catch (Error e) {
-		   warning("%s\n", e.message);
+			/* Missing commit.template is a valid default configuration. */
 		}
 
 		bool exists_squash_msg = repository.get_location().get_child(SQUASH_MSG_FILENAME).query_exists();

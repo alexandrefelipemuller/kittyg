@@ -33,6 +33,9 @@
                 <property name="ellipsize">middle</property>
                 <property name="halign">start</property>
                 <property name="hexpand">True</property>
+                <style>
+                  <class name="ref-title"/>
+                </style>
               </object>
             </child>
             <child>

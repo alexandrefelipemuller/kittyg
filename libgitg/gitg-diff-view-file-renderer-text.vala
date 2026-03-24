@@ -646,7 +646,7 @@ class Gitg.DiffViewFileRendererText : Gtk.SourceView, DiffSelectable, DiffViewFi
 		var added_attributes = new Gtk.SourceMarkAttributes();
 		var removed_attributes = new Gtk.SourceMarkAttributes();
 
-		var dark = new Theme().is_theme_dark();
+		var dark = Theme.instance().is_theme_dark();
 
 		if (dark)
 		{

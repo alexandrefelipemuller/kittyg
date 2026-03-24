@@ -445,11 +445,19 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 		d_header_bar.remove(d_search_button);
 		d_header_bar.remove(d_select_button);
 		d_header_bar.remove(d_gear_menu);
+		d_header_bar.remove(d_dash_button);
+		d_header_bar.remove(d_clone_button);
+		d_header_bar.remove(d_add_button);
+		d_header_bar.remove(d_header_commit_button);
 
-		d_header_bar.pack_end(d_gear_menu);
-		d_header_bar.pack_end(d_activities_switcher);
-		d_header_bar.pack_end(d_select_button);
-		d_header_bar.pack_end(d_search_button);
+			d_header_bar.pack_start(d_dash_button);
+			d_header_bar.pack_start(d_clone_button);
+			d_header_bar.pack_start(d_add_button);
+			d_header_bar.pack_end(d_gear_menu);
+			d_header_bar.pack_end(d_select_button);
+			d_header_bar.pack_end(d_activities_switcher);
+			d_header_bar.pack_end(d_search_button);
+			d_header_bar.pack_end(d_header_commit_button);
 
 		d_infobar.response.connect((w, r) => {
 			d_infobar.hide();
@@ -488,7 +496,7 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 	{
 		base.style_updated();
 
-		var dark = new Theme().is_theme_dark();
+		var dark = Theme.instance().is_theme_dark();
 
 		if (dark)
 		{
@@ -633,6 +641,7 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 
 	private static Regex regex_custom_actions_global;
 	private static Regex regex_custom_actions_global_group;
+	private ulong d_gear_menu_button_press_id;
 
 	private void repository_changed()
 	{
@@ -676,7 +685,17 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 			gear_image.set_from_icon_name ("view-more-symbolic", BUTTON);
 			d_gear_menu.show();
 			d_gear_menu.sensitive = true;
-			d_gear_menu.button_press_event.connect(() => {
+			if (d_gear_menu_button_press_id != 0)
+			{
+				d_gear_menu.disconnect(d_gear_menu_button_press_id);
+			}
+
+			d_gear_menu_button_press_id = d_gear_menu.button_press_event.connect(() => {
+				if (d_repository == null)
+				{
+					return false;
+				}
+
 				menu_actions = load_global_actions();
 				bool has_items = menu_actions.get_data<int>("items") > 0;
 				global_actions_item.set_attribute("visible", "b", has_items);
@@ -721,6 +740,13 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 
 	private Gtk.Menu load_global_actions() {
 		var menu = new Gtk.Menu();
+		menu.set_data<int>("items", 0);
+
+		if (d_repository == null)
+		{
+			return menu;
+		}
+
 		var conf = d_repository.get_config().snapshot();
 		Gitg.UiUtils.add_custom_actions(menu, "global",
 		                                conf, regex_custom_actions_global,
@@ -908,22 +934,25 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 
 	private void on_preferences_activated()
 	{
-		unowned List<Gtk.Window> wnds = application.get_windows();
-
 		// Create preferences dialog if needed
 		if (d_preferences == null)
 		{
-			d_preferences = Builder.load_object<PreferencesDialog>("ui/gitg-preferences.ui", "preferences");
+			try
+			{
+				d_preferences = Builder.load_object<PreferencesDialog>("ui/gitg-preferences.ui", "preferences");
+			}
+			catch (Error e)
+			{
+				show_infobar(_("Failed to open Preferences"), e.message, Gtk.MessageType.ERROR);
+				return;
+			}
 
 			d_preferences.destroy.connect((w) => {
 				d_preferences = null;
 			});
 		}
 
-		if (wnds != null)
-		{
-			d_preferences.set_transient_for(wnds.data);
-		}
+		d_preferences.set_transient_for(this);
 
 		d_preferences.present();
 	}

@@ -101,6 +101,7 @@
         <property name="visible">False</property>
         <property name="vexpand">True</property>
         <property name="hexpand">True</property>
+        <property name="hscrollbar_policy">never</property>
         <child>
           <object class="GtkFrame" id="repository_list_frame">
             <property name="halign">center</property>
@@ -108,7 +109,10 @@
             <property name="visible">true</property>
             <property name="margin-bottom">32</property>
             <property name="margin-top">32</property>
-            <property name="width-request">550</property>
+            <property name="margin-start">24</property>
+            <property name="margin-end">24</property>
+            <property name="width-request">980</property>
+            <property name="hexpand">True</property>
             <child>
               <object class="GitgRepositoryListBox" id="repository_list_box">
                 <property name="visible">True</property>

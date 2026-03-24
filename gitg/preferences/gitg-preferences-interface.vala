@@ -28,6 +28,7 @@ public class PreferencesInterface : Gtk.Grid, GitgExt.Preferences
 	private bool d_block;
 	private Settings? d_settings;
 	private Settings? d_global_settings;
+	private ulong d_global_font_changed_id;
 
 	[GtkChild (name = "horizontal_layout_enabled")]
 	private unowned Gtk.CheckButton d_horizontal_layout_enabled;
@@ -134,7 +135,7 @@ public class PreferencesInterface : Gtk.Grid, GitgExt.Preferences
 		                "font",
 		                SettingsBindFlags.GET | SettingsBindFlags.SET);
 
-		d_global_settings.changed["monospace-font-name"].connect((s, k) => {
+		d_global_font_changed_id = d_global_settings.changed["monospace-font-name"].connect((s, k) => {
 			update_system_font_label();
 		});
 
@@ -151,7 +152,14 @@ public class PreferencesInterface : Gtk.Grid, GitgExt.Preferences
 
 		// Connect radio button handlers
 		d_text_diff_mode.changed.connect(() => {
-			d_settings.set_string("text-diff-mode", d_text_diff_mode.get_active_id());
+			var active_id = d_text_diff_mode.get_active_id();
+			if (active_id != null)
+			{
+				if (d_settings.get_string("text-diff-mode") != active_id)
+				{
+					d_settings.set_string("text-diff-mode", active_id);
+				}
+			}
 		});
 	}
 
@@ -168,6 +176,13 @@ public class PreferencesInterface : Gtk.Grid, GitgExt.Preferences
 		{
 			d_settings.changed["orientation"].disconnect(orientation_changed);
 			d_settings = null;
+		}
+
+		if (d_global_settings != null && d_global_font_changed_id != 0)
+		{
+			d_global_settings.disconnect(d_global_font_changed_id);
+			d_global_font_changed_id = 0;
+			d_global_settings = null;
 		}
 
 		base.dispose();

@@ -298,16 +298,20 @@ public class Application : Gtk.Application
 	private void on_app_about_activated()
 	{
 		string[] artists = {"Jakub Steiner <jimmac@gmail.com>"};
-		string[] authors = {"Jesse van den Kieboom <jessevdk@gnome.org>",
+		string[] authors = {"Alexandre F Muller de Souza <alexandrefelipemuller@gmail.com>",
+		                    "Jesse van den Kieboom <jessevdk@gnome.org>",
 		                    "Ignacio Casal Quinteiro <icq@gnome.org>",
 		                    "Alberto Fanjul <albfan@gnome.org>"};
 
-		string copyright = "Copyright \xc2\xa9 2012 Jesse van den Kieboom";
-		string comments = _("kittyg is a Git repository viewer for GTK+/GNOME");
+		string copyright = "Copyright \xc2\xa9 2012 Jesse van den Kieboom\n"
+		                 + "Fork Copyright \xc2\xa9 2026 Alexandre F Muller de Souza";
+		string comments = _("Kittyg is a GTK/GNOME Git repository viewer.\n"
+		                    + "Fork of gitg maintained by Alexandre F Muller de Souza.");
 
 		unowned List<Gtk.Window> wnds = get_windows();
 
 		Gtk.show_about_dialog(wnds != null ? wnds.data : null,
+		                      "program-name", "Kittyg",
 		                      "artists", artists,
 		                      "authors", authors,
 		                      "copyright", copyright,

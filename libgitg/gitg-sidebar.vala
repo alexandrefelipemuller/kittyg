@@ -248,6 +248,7 @@ public class Sidebar : Gtk.TreeView
 
 			var r = (Gtk.CellRendererText)cell;
 			r.text = item.text;
+			r.weight_set = false;
 
 			if (hint == SidebarHint.DUMMY)
 			{
@@ -263,6 +264,12 @@ public class Sidebar : Gtk.TreeView
 			else
 			{
 				r.foreground_set = false;
+
+				if (get_selection().iter_is_selected(iter))
+				{
+					r.weight = 600;
+					r.weight_set = true;
+				}
 			}
 		});
 

@@ -28,9 +28,12 @@ namespace GitgCommit
 		private bool d_has_staged;
 		private ulong d_externally_changed_id;
 		private bool d_ignore_external_changes;
+		private bool d_commit_preparing;
 		private Gitg.WhenMapped? d_reload_when_mapped;
 		private Gitg.StageStatusEnumerator? d_status_enumerator;
 		private uint d_reload_serial;
+		private uint d_selection_diff_timeout;
+		private uint d_diff_request_serial;
 
 		private enum UiType
 		{
@@ -84,6 +87,12 @@ namespace GitgCommit
 
 		public override void dispose()
 		{
+			if (d_selection_diff_timeout != 0)
+			{
+				Source.remove(d_selection_diff_timeout);
+				d_selection_diff_timeout = 0;
+			}
+
 			if (d_status_enumerator != null)
 			{
 				d_status_enumerator.cancel();
@@ -174,6 +183,82 @@ namespace GitgCommit
 		private Gitg.Repository? d_current_submodule_repository;
 		private StageUnstageSubmoduleCommitCallback d_stage_unstage_submodule_commit_callback;
 
+		private uint begin_diff_request()
+		{
+			return ++d_diff_request_serial;
+		}
+
+		private void cancel_pending_diff_request()
+		{
+			d_diff_request_serial++;
+			d_update_diff_callback = null;
+		}
+
+		private void schedule_sidebar_selection_changed()
+		{
+			if (d_selection_diff_timeout != 0)
+			{
+				Source.remove(d_selection_diff_timeout);
+			}
+
+			d_selection_diff_timeout = Timeout.add(100, () => {
+				d_selection_diff_timeout = 0;
+				update_sidebar_selection();
+				return false;
+			});
+		}
+
+		private void update_sidebar_selection()
+		{
+			var items = d_main.sidebar.get_selected_items<Gitg.SidebarItem>();
+
+			if (items.length == 1 && items[0] is Gitg.SidebarStore.SidebarHeader)
+			{
+				cancel_pending_diff_request();
+				show_ui(UiType.DIFF);
+				d_main.diff_view.diff = null;
+				d_main.button_stage.visible = false;
+				d_main.button_discard.visible = false;
+				return;
+			}
+
+			Sidebar.Item.Type type;
+
+			var sitems = items_for_items(items, out type);
+
+			if (sitems.length == 0)
+			{
+				cancel_pending_diff_request();
+				show_ui(UiType.DIFF);
+				d_main.diff_view.diff = null;
+				return;
+			}
+
+			if (sitems.length > 1)
+			{
+				cancel_pending_diff_request();
+				show_ui(UiType.DIFF);
+				d_main.diff_view.diff = null;
+				d_main.button_stage.visible = false;
+				d_main.button_discard.visible = false;
+				return;
+			}
+
+			if (type == Sidebar.Item.Type.SUBMODULE)
+			{
+				cancel_pending_diff_request();
+				show_submodule_diff((Gitg.StageStatusSubmodule)sitems[0]);
+			}
+			else if (type == Sidebar.Item.Type.STAGED)
+			{
+				show_staged_diff(sitems);
+			}
+			else
+			{
+				show_unstaged_diff(sitems);
+			}
+		}
+
 		private void show_unstaged_diff(Gitg.StageStatusItem[] items)
 		{
 			if (items.length == 1 && items[0] is Gitg.StageStatusSubmodule)
@@ -203,11 +288,22 @@ namespace GitgCommit
 		                                       bool                    patchable)
 		{
 			var stage = repository.stage;
+			var request_serial = begin_diff_request();
 
 			stage.diff_workdir_all.begin(items, view.options, (obj, res) => {
+				if (request_serial != d_diff_request_serial)
+				{
+					return;
+				}
+
 				try
 				{
 					var d = stage.diff_workdir_all.end(res);
+
+					if (request_serial != d_diff_request_serial)
+					{
+						return;
+					}
 
 					view.unstaged = patchable;
 					view.staged = false;
@@ -379,6 +475,7 @@ namespace GitgCommit
 
 			if (type != UiType.DIFF)
 			{
+				cancel_pending_diff_request();
 				d_main.diff_view.diff = null;
 			}
 
@@ -595,11 +692,22 @@ namespace GitgCommit
 		                                     bool                    patchable)
 		{
 			var stage = repository.stage;
+			var request_serial = begin_diff_request();
 
 			stage.diff_index_all.begin(items, view.options, (obj, res) => {
+				if (request_serial != d_diff_request_serial)
+				{
+					return;
+				}
+
 				try
 				{
 					var d = stage.diff_index_all.end(res);
+
+					if (request_serial != d_diff_request_serial)
+					{
+						return;
+					}
 
 					view.unstaged = false;
 					view.staged = patchable;
@@ -1386,6 +1494,11 @@ namespace GitgCommit
 
 		private void on_commit_clicked()
 		{
+			if (d_commit_preparing)
+			{
+				return;
+			}
+
 			Ggit.Signature? committer;
 			Ggit.Signature author;
 
@@ -1411,7 +1524,13 @@ namespace GitgCommit
 			}
 			else
 			{
+				d_commit_preparing = true;
+				application.busy = true;
+
 				pre_commit.begin(author, (obj, res) => {
+					application.busy = false;
+					d_commit_preparing = false;
+
 					if (!pre_commit.end(res))
 					{
 						return;
@@ -1846,7 +1965,7 @@ namespace GitgCommit
 			vars["input-yes"] = _("Ignore");
 			vars["input-text"] = dir;
 
-			var result = Gitg.Utils.run_entry_dialog(application as Gtk.Window, vars);
+			var result = Gitg.UiUtils.run_entry_dialog(application as Gtk.Window, vars);
 
 			if (result == null)
 			{
@@ -2168,38 +2287,7 @@ namespace GitgCommit
 
 		private void sidebar_selection_changed(Gitg.SidebarItem[] items)
 		{
-			if (items.length == 1 && items[0] is Gitg.SidebarStore.SidebarHeader)
-			{
-				show_ui(UiType.DIFF);
-				d_main.diff_view.diff = null;
-				d_main.button_stage.visible = false;
-				d_main.button_discard.visible = false;
-				return;
-			}
-
-			Sidebar.Item.Type type;
-
-			var sitems = items_for_items(items, out type);
-
-			if (sitems.length == 0)
-			{
-				show_ui(UiType.DIFF);
-				d_main.diff_view.diff = null;
-				return;
-			}
-
-			if (type == Sidebar.Item.Type.SUBMODULE)
-			{
-				show_submodule_diff((Gitg.StageStatusSubmodule)sitems[0]);
-			}
-			else if (type == Sidebar.Item.Type.STAGED)
-			{
-				show_staged_diff(sitems);
-			}
-			else
-			{
-				show_unstaged_diff(sitems);
-			}
+			schedule_sidebar_selection_changed();
 		}
 
 		private void on_stage_selected_items()

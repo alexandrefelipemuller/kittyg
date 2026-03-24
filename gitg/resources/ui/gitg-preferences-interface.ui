@@ -330,7 +330,7 @@
                   <object class="GtkComboBoxText" id="text_diff_mode">
                     <property name="visible">True</property>
                     <property name="halign">start</property>
-                    <property name="active">True</property>
+                    <property name="active">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
