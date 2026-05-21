@@ -115,6 +115,7 @@ class Dialog : Gtk.Dialog
 	private string saved_commit_message;
 	private Gtk.TextTag d_subject_tag;
 	private Gtk.TextTag d_too_long_tag;
+	private uint d_prepare_commit_msg_serial;
 
 	public Ggit.Diff? diff
 	{
@@ -583,9 +584,10 @@ class Dialog : Gtk.Dialog
 					if (commit != null)
 					{
 						update_default_message();
-						message = prepare_commit_msg_hook(commit.get_message(),
-						                                  GitgCommit.Dialog.PREPARE_COMMIT_MSG_SOURCE_COMMIT,
-						                                  commit.get_id().to_string());
+						message = commit.get_message();
+						queue_prepare_commit_message(commit.get_message(),
+						                             GitgCommit.Dialog.PREPARE_COMMIT_MSG_SOURCE_COMMIT,
+						                             commit.get_id().to_string());
 
 						author = commit.get_author();
 					}
@@ -659,17 +661,20 @@ class Dialog : Gtk.Dialog
 
 		string current_contents = generator.to_data (null);
 		try {
-				var dirname = Environment.get_user_data_dir() + "/" + Gitg.Config.APPLICATION_ID;
+				var dirname = Path.build_filename(Environment.get_user_data_dir(),
+				                                  Gitg.Config.APPLICATION_ID);
 				var dir = File.new_for_path(dirname);
 				if (!dir.query_exists ()) {
 					dir.make_directory_with_parents ();
 				}
-				var file = File.new_for_path(dirname + "/" + COMMIT_MESSAGE_FILENAME);
+				var file = File.new_for_path(Path.build_filename(dirname, COMMIT_MESSAGE_FILENAME));
 				file.replace_contents (current_contents.data, null, false,
 									   GLib.FileCreateFlags.NONE, null, null);
 		}
 		catch (GLib.Error err) {
-			error ("%s\n", err.message);
+			Gitg.Logger.log_event("STATE",
+			                      "Failed to save commit message history: %s".printf(err.message));
+			warning ("%s\n", err.message);
 		}
 	}
 
@@ -798,56 +803,7 @@ class Dialog : Gtk.Dialog
 
 		update_highlight();
 
-		default_message = "";
-		string source = "";
-
-		try
-		{
-			Ggit.Config config;
-
-			config = repository.get_config().snapshot();
-
-			var template_path = config.get_string(CONFIG_COMMIT_TEMPLATE);
-
-			if (template_path != null)
-			{
-				var path = Gitg.Utils.expand_home_dir(template_path);
-
-				if (!GLib.Path.is_absolute(path))
-				{
-					path = repository.get_workdir().get_child(path).get_path();
-				}
-
-				string contents;
-				size_t len;
-
-				FileUtils.get_contents(path, out contents, out len);
-
-				default_message = Gitg.Convert.utf8(contents, (ssize_t)len).strip();
-				source = PREPARE_COMMIT_MSG_SOURCE_TEMPLATE;
-			}
-		}
-		catch (Error e) {
-			/* Missing commit.template is a valid default configuration. */
-		}
-
-		bool exists_squash_msg = repository.get_location().get_child(SQUASH_MSG_FILENAME).query_exists();
-		if (exists_squash_msg)
-		{
-			source = PREPARE_COMMIT_MSG_SOURCE_SQUASH;
-		}
-
-		get_head_commit.begin((obj, res) => {
-			var commit = get_head_commit.end(res);
-
-			bool exists_merge_msg = repository.get_location().get_child(MERGE_MSG_FILENAME).query_exists();
-			if (exists_merge_msg || commit != null && commit.get_parents().get_size() > 1)
-			{
-				source = PREPARE_COMMIT_MSG_SOURCE_MERGE;
-			}
-		});
-
-		message = prepare_commit_msg_hook(default_message, source);
+		load_initial_commit_message.begin();
 	}
 
 	private async Gitg.Commit? get_head_commit()
@@ -868,91 +824,203 @@ class Dialog : Gtk.Dialog
 		return retval;
 	}
 
-	private string prepare_commit_msg_hook (string commit_msg, string commit_src = "", string commit_sha = "") {
-		string? output = null;
-		var config = repository.get_config().snapshot();
-		string? hooks_path = null;
-		try {
-			hooks_path = config.get_string(CONFIG_HOOKS_PATH);
-		} catch {
-			hooks_path = "%s/hooks".printf(repository.get_location().get_path());
-		}
-		var hook_name = "%s/%s".printf(hooks_path, PREPARE_COMMIT_MSG_FILENAME);
-		var hook_file = File.new_for_path(hook_name);
+	private string load_default_commit_message(out string source)
+	{
+		source = "";
+		string ret = "";
 
-		if (!hook_file.query_exists()) {
+		try
+		{
+			var config = repository.get_config().snapshot();
+			var template_path = config.get_string(CONFIG_COMMIT_TEMPLATE);
+
+			if (template_path != null)
+			{
+				var path = Gitg.Utils.expand_home_dir(template_path);
+
+				if (!GLib.Path.is_absolute(path))
+				{
+					path = repository.get_workdir().get_child(path).get_path();
+				}
+
+				string contents;
+				size_t len;
+
+				FileUtils.get_contents(path, out contents, out len);
+
+				ret = Gitg.Convert.utf8(contents, (ssize_t)len).strip();
+				source = PREPARE_COMMIT_MSG_SOURCE_TEMPLATE;
+			}
+		}
+		catch (Error e)
+		{
+			/* Missing commit.template is a valid default configuration. */
+		}
+
+		return ret;
+	}
+
+	private void setup_prepare_commit_msg_hook_environment(Gitg.Hook hook)
+	{
+		var wd = repository.get_workdir();
+		var gitdir = repository.get_location().get_path();
+
+		hook.working_directory = wd;
+		hook.environment["GIT_DIR"] = gitdir;
+		hook.environment["GIT_INDEX_FILE"] = Path.build_filename(gitdir, "index");
+		hook.environment["GIT_PREFIX"] = ".";
+	}
+
+	private string prepare_commit_msg_hook_sync(string commit_msg,
+	                                            string commit_src = "",
+	                                            string commit_sha = "")
+	{
+		var hook = new Gitg.Hook(PREPARE_COMMIT_MSG_FILENAME);
+
+		if (!hook.exists_in(repository))
+		{
 			return commit_msg;
 		}
 
-		File file = null;
+		setup_prepare_commit_msg_hook_environment(hook);
+
 		string filename = COMMIT_MSG_FILENAME;
 		bool delete_filename = false;
 
-		if (commit_src == PREPARE_COMMIT_MSG_SOURCE_MERGE) {
+		if (commit_src == PREPARE_COMMIT_MSG_SOURCE_MERGE)
+		{
 			filename = MERGE_MSG_FILENAME;
 			delete_filename = true;
-		} else if (commit_src == PREPARE_COMMIT_MSG_SOURCE_SQUASH) {
+		}
+		else if (commit_src == PREPARE_COMMIT_MSG_SOURCE_SQUASH)
+		{
 			filename = SQUASH_MSG_FILENAME;
 			delete_filename = true;
 		}
 
-		try {
-			var hook_file_info = hook_file.query_info(FileAttribute.ACCESS_CAN_EXECUTE, FileQueryInfoFlags.NONE);
+		var file = repository.get_location().get_child(filename);
 
-			if (hook_file_info.get_attribute_boolean (FileAttribute.ACCESS_CAN_EXECUTE)) {
-				try {
-					file = repository.get_location().get_child(filename);
-					FileIOStream stream;
-					if (delete_filename) {
-						stream = file.create_readwrite (FileCreateFlags.PRIVATE);
-					} else {
-						stream = file.open_readwrite ();
-					}
+		try
+		{
+			FileUtils.set_contents(file.get_path(), commit_msg);
 
-					var command = "echo %s > %s".printf(Shell.quote(commit_msg), Shell.quote(file.get_path()));
-					Posix.system(command);
+			hook.add_argument(file.get_path());
 
-					string commit_sha_hook_param = "";
-					if (commit_sha == "") {
-						commit_sha_hook_param = Shell.quote(commit_sha);
-					}
-					command = "%s %s %s %s".printf(Shell.quote(hook_name), Shell.quote(file.get_path()),
-					                               Shell.quote(commit_src), commit_sha_hook_param);
-					Posix.system(command);
+			if (commit_src != "")
+			{
+				hook.add_argument(commit_src);
+			}
 
-					FileInputStream @is = stream.input_stream as FileInputStream;
-					DataInputStream dis = new DataInputStream (@is);
-					string str;
+			if (commit_sha != "")
+			{
+				hook.add_argument(commit_sha);
+			}
 
-					try {
-						while ((str = dis.read_line ()) !=null) {
-							if (output != null)
-								output += "\n%s".printf(str);
-							else
-								output = "%s".printf(str);
-						}
-					} catch (Error e) {
-						warning ("Error reading %s hook result: %s", PREPARE_COMMIT_MSG_FILENAME, e.message);
-					}
-				} catch (Error e) {
-					warning ("Error executing pre-commit-msg: %s", e.message);
-				} finally {
-					if (delete_filename && file != null) {
-						file.delete_async.begin (Priority.DEFAULT, null, (obj, res) => {
-							try {
-								file.delete_async.end (res);
-							} catch (Error e) {
-								warning ("Error deleting %s file: %s", PREPARE_COMMIT_MSG_FILENAME, e.message);
-							}
-						});
-					}
+			var status = hook.run_sync(repository);
+			if (status != 0)
+			{
+				Gitg.Logger.log_event("HOOK",
+				                      "%s exited with status %d".printf(PREPARE_COMMIT_MSG_FILENAME,
+				                                                           status));
+				return commit_msg;
+			}
+
+			string contents;
+			size_t len;
+
+			FileUtils.get_contents(file.get_path(), out contents, out len);
+			return Gitg.Convert.utf8(contents, (ssize_t)len).strip();
+		}
+		catch (Error e)
+		{
+			Gitg.Logger.log_event("HOOK",
+			                      "Failed to execute %s: %s".printf(PREPARE_COMMIT_MSG_FILENAME,
+			                                                         e.message));
+			warning ("Error executing %s: %s", PREPARE_COMMIT_MSG_FILENAME, e.message);
+			return commit_msg;
+		}
+		finally
+		{
+			if (delete_filename)
+			{
+				try
+				{
+					file.delete();
+				}
+				catch (Error e)
+				{
+					warning ("Error deleting %s file: %s", PREPARE_COMMIT_MSG_FILENAME, e.message);
 				}
 			}
-		} catch (Error e) {
-			warning ("Error checking %s hook : %s", PREPARE_COMMIT_MSG_FILENAME, e.message);
+		}
+	}
+
+	private async string prepare_commit_msg_hook(string commit_msg,
+	                                             string commit_src = "",
+	                                             string commit_sha = "")
+	{
+		string output = commit_msg;
+
+		try
+		{
+			yield Gitg.Async.thread(() => {
+				output = prepare_commit_msg_hook_sync(commit_msg, commit_src, commit_sha);
+			});
+		}
+		catch (Error e)
+		{
+			Gitg.Logger.log_event("HOOK",
+			                      "Failed to run %s asynchronously: %s".printf(PREPARE_COMMIT_MSG_FILENAME,
+			                                                                     e.message));
 		}
 
 		return output;
+	}
+
+	private void queue_prepare_commit_message(string commit_msg,
+	                                          string commit_src = "",
+	                                          string commit_sha = "")
+	{
+		var request_serial = ++d_prepare_commit_msg_serial;
+		var expected_message = message;
+
+		prepare_commit_msg_hook.begin(commit_msg, commit_src, commit_sha, (obj, res) => {
+			var output = prepare_commit_msg_hook.end(res);
+
+			if (request_serial != d_prepare_commit_msg_serial)
+			{
+				return;
+			}
+
+			if (message != expected_message)
+			{
+				return;
+			}
+
+			message = output;
+		});
+	}
+
+	private async void load_initial_commit_message()
+	{
+		string source;
+		default_message = load_default_commit_message(out source);
+
+		if (repository.get_location().get_child(SQUASH_MSG_FILENAME).query_exists())
+		{
+			source = PREPARE_COMMIT_MSG_SOURCE_SQUASH;
+		}
+
+		var commit = yield get_head_commit();
+
+		if (repository.get_location().get_child(MERGE_MSG_FILENAME).query_exists() ||
+		    (commit != null && commit.get_parents().get_size() > 1))
+		{
+			source = PREPARE_COMMIT_MSG_SOURCE_MERGE;
+		}
+
+		message = default_message;
+		queue_prepare_commit_message(default_message, source);
 	}
 
 	private void update_highlight()
@@ -1090,8 +1158,9 @@ class Dialog : Gtk.Dialog
 
 	private Json.Array load_commit_messages ()
 	{
-		var file = File.new_for_path(Environment.get_user_data_dir() + "/" +
-									 Gitg.Config.APPLICATION_ID + "/" + COMMIT_MESSAGE_FILENAME);
+		var file = File.new_for_path(Path.build_filename(Environment.get_user_data_dir(),
+		                                                 Gitg.Config.APPLICATION_ID,
+		                                                 COMMIT_MESSAGE_FILENAME));
 
 		uint8[] file_contents;
 

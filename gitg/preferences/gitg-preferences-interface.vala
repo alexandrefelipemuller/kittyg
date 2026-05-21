@@ -63,6 +63,12 @@ public class PreferencesInterface : Gtk.Grid, GitgExt.Preferences
 	[GtkChild (name = "text_diff_mode")]
 	private unowned Gtk.ComboBoxText d_text_diff_mode;
 
+	[GtkChild (name = "use_custom_merge_tool")]
+	private unowned Gtk.CheckButton d_use_custom_merge_tool;
+
+	[GtkChild (name = "external_merge_tool_name")]
+	private unowned Gtk.Entry d_external_merge_tool_name;
+
 	construct
 	{
 		d_settings = new Settings(Gitg.Config.APPLICATION_ID + ".preferences.interface");
@@ -133,6 +139,21 @@ public class PreferencesInterface : Gtk.Grid, GitgExt.Preferences
 		d_settings.bind("monospace-font-name",
 		                d_font_button,
 		                "font",
+		                SettingsBindFlags.GET | SettingsBindFlags.SET);
+
+		d_settings.bind("use-custom-merge-tool",
+		                d_use_custom_merge_tool,
+		                "active",
+		                SettingsBindFlags.GET | SettingsBindFlags.SET);
+
+		d_settings.bind("use-custom-merge-tool",
+		                d_external_merge_tool_name,
+		                "sensitive",
+		                SettingsBindFlags.GET | SettingsBindFlags.SET);
+
+		d_settings.bind("external-merge-tool-name",
+		                d_external_merge_tool_name,
+		                "text",
 		                SettingsBindFlags.GET | SettingsBindFlags.SET);
 
 		d_global_font_changed_id = d_global_settings.changed["monospace-font-name"].connect((s, k) => {

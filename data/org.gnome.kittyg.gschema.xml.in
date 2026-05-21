@@ -92,6 +92,20 @@
       <summary>Text Diff Mode</summary>
       <description>Text diff mode.</description>
     </key>
+    <key name="use-custom-merge-tool" type="b">
+      <default>false</default>
+      <summary>Use Custom Merge Tool</summary>
+      <description>
+        Use the merge tool configured in kittyg instead of Git’s configured merge.tool.
+      </description>
+    </key>
+    <key name="external-merge-tool-name" type="s">
+      <default>""</default>
+      <summary>External Merge Tool Name</summary>
+      <description>
+        The merge tool name to pass to git mergetool --tool when a custom tool is enabled.
+      </description>
+    </key>
   </schema>
   <schema gettext-domain="@GETTEXT_PACKAGE@" id="@APPLICATION_ID@.preferences.general" path="@SCHEMA_PATH@/preferences/general/">
     <key name="smart-push" type="b">
@@ -187,6 +201,14 @@
       <description>
          Determines whether to also show the upstream (remote) tracking branch when
          selecting a local branch in the history view.
+      </description>
+    </key>
+    <key name="show-all-branch-lanes-with-branch" type="b">
+      <default>true</default>
+      <summary>Show All Branch Lanes With Branch</summary>
+      <description>
+         Determines whether the history graph should preserve the lanes for all
+         local branches when a single local branch is selected in the sidebar.
       </description>
     </key>
     <key name="filter-unknown-refs" type="b">

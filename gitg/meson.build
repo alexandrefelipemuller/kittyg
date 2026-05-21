@@ -1,7 +1,9 @@
 gitg_sources = files(
   'gitg-action-support.vala',
   'gitg-commit-action-cherry-pick.vala',
+  'gitg-merge-state.vala',
   'gitg-ref-action-checkout.vala',
+  'gitg-ref-action-launch-merge-tool.vala',
   'gitg-ref-action-merge.vala',
 )
 
@@ -41,6 +43,7 @@ sources = gitg_sources + files(
   'gitg-dash-view.vala',
   'gitg-dirs.vala',
   'gitg-git-environment.vala',
+  'gitg-logger.vala',
   'gitg-edit-remote-action.vala',
   'gitg-notifications.vala',
   'gitg-plugins-engine.vala',

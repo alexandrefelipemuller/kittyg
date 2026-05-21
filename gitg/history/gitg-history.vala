@@ -146,6 +146,10 @@ namespace GitgHistory
 				update_walker();
 			});
 
+			d_settings.changed["show-all-branch-lanes-with-branch"].connect((s, k) => {
+				update_walker();
+			});
+
 			d_selected = new Gee.HashSet<Ggit.OId>((Gee.HashDataFunc<Ggit.OId>)Ggit.OId.hash,
 			                                       (Gee.EqualDataFunc<Ggit.OId>)Ggit.OId.equal);
 
@@ -896,6 +900,139 @@ namespace GitgHistory
 			application.repository_commits_changed();
 		}
 
+		private async void discard_uncommitted_changes(GitgExt.UserQuery q)
+		{
+			var cwd_file = application.repository.get_workdir();
+
+			if (cwd_file == null || cwd_file.get_path() == null)
+			{
+				application.show_infobar(_("Failed to discard changes"),
+				                         _("Failed to determine repository working directory"),
+				                         Gtk.MessageType.ERROR);
+				q.quit();
+				return;
+			}
+
+			var cwd = cwd_file.get_path();
+			application.busy = true;
+			var success = false;
+
+			try
+			{
+				yield Gitg.Async.thread(() => {
+					string? stdout_data = null;
+					string? stderr_data = null;
+					int exit_status = 0;
+
+					string[] reset_argv = {"git", "reset", "--hard", "HEAD"};
+
+					Process.spawn_sync(cwd,
+					                   reset_argv,
+					                   null,
+					                   SpawnFlags.SEARCH_PATH,
+					                   null,
+					                   out stdout_data,
+					                   out stderr_data,
+					                   out exit_status);
+
+					if (exit_status != 0)
+					{
+						var msg = (stderr_data ?? "").strip();
+
+						if (msg == "")
+						{
+							msg = (stdout_data ?? "").strip();
+						}
+
+						if (msg == "")
+						{
+							msg = _("git reset --hard failed with exit code %d").printf(exit_status);
+						}
+
+						throw new IOError.FAILED(msg);
+					}
+
+					stdout_data = null;
+					stderr_data = null;
+					exit_status = 0;
+
+					string[] clean_argv = {"git", "clean", "-fd"};
+
+					Process.spawn_sync(cwd,
+					                   clean_argv,
+					                   null,
+					                   SpawnFlags.SEARCH_PATH,
+					                   null,
+					                   out stdout_data,
+					                   out stderr_data,
+					                   out exit_status);
+
+					if (exit_status != 0)
+					{
+						var msg = (stderr_data ?? "").strip();
+
+						if (msg == "")
+						{
+							msg = (stdout_data ?? "").strip();
+						}
+
+						if (msg == "")
+						{
+							msg = _("git clean -fd failed with exit code %d").printf(exit_status);
+						}
+
+						throw new IOError.FAILED(msg);
+					}
+				});
+				success = true;
+			}
+			catch (Error err)
+			{
+				application.show_infobar(_("Failed to discard changes"),
+				                         err.message,
+				                         Gtk.MessageType.ERROR);
+			}
+
+			q.quit();
+			application.busy = false;
+
+			if (success)
+			{
+				application.repository_commits_changed();
+			}
+		}
+
+		private bool do_discard_uncommitted_changes(GitgExt.UserQuery q)
+		{
+			discard_uncommitted_changes.begin(q, (obj, res) => {
+				discard_uncommitted_changes.end(res);
+			});
+
+			return false;
+		}
+
+		private void on_discard_uncommitted_activated()
+		{
+			var q = new GitgExt.UserQuery.full(_("Discard changes"),
+			                                   _("Are you sure you want to permanently discard all uncommitted changes in your working tree?"),
+			                                   Gtk.MessageType.QUESTION,
+			                                   _("_Cancel"), Gtk.ResponseType.CANCEL,
+			                                   _("Discard"), Gtk.ResponseType.OK);
+
+			q.default_is_destructive = true;
+
+			q.response.connect((w, r) => {
+				if (r == Gtk.ResponseType.OK)
+				{
+					return do_discard_uncommitted_changes(q);
+				}
+
+				return true;
+			});
+
+			application.user_query(q);
+		}
+
 		private Gtk.Menu popup_menu_for_uncommitted_marker()
 		{
 			Gtk.Menu menu = new Gtk.Menu();
@@ -904,6 +1041,14 @@ namespace GitgHistory
 			item.show();
 			item.activate.connect(() => {
 				stash_uncommitted_changes.begin();
+			});
+
+			menu.append(item);
+
+			item = new Gtk.MenuItem.with_mnemonic(_("_Discard changes"));
+			item.show();
+			item.activate.connect(() => {
+				on_discard_uncommitted_activated();
 			});
 
 			menu.append(item);
@@ -1173,11 +1318,13 @@ namespace GitgHistory
 			}
 
 			var merge = new Gitg.RefActionMerge(application, af, reference);
+			var launch_merge_tool = new Gitg.RefActionLaunchMergeTool(application, af, reference);
 
-			if (merge.available)
+			if (merge.available || launch_merge_tool.available)
 			{
 				actions.add(null);
 				add_ref_action(actions, merge);
+				add_ref_action(actions, launch_merge_tool);
 			}
 
 			var info_tag = new Gitg.RefActionTagShowInfo(application, af, reference);
@@ -1410,6 +1557,42 @@ namespace GitgHistory
 			return id;
 		}
 
+		private Ggit.OId[] local_branch_permanent_lanes(Gee.HashSet<Ggit.OId> perm_uniq)
+		{
+			var permanent = new Ggit.OId[0];
+
+			if (application.repository == null)
+			{
+				return permanent;
+			}
+
+			try
+			{
+				application.repository.references_foreach_name((nm) => {
+					if (!nm.has_prefix("refs/heads/"))
+					{
+						return 0;
+					}
+
+					try
+					{
+						var id = id_for_ref(application.repository.lookup_reference(nm));
+
+						if (id != null && perm_uniq.add(id))
+						{
+							permanent += id;
+						}
+					}
+					catch {}
+
+					return 0;
+				});
+			}
+			catch {}
+
+			return permanent;
+		}
+
 		private void update_walker()
 		{
 			d_selected.clear();
@@ -1419,6 +1602,7 @@ namespace GitgHistory
 
 			var isall = d_main.refs_list.is_all;
 			var isheader = d_main.refs_list.is_header;
+			var refs = d_main.refs_list.selection;
 
 			var perm_uniq = new Gee.HashSet<Ggit.OId>((Gee.HashDataFunc)Ggit.OId.hash,
 			                                          (Gee.EqualDataFunc)Ggit.OId.equal);
@@ -1457,8 +1641,26 @@ namespace GitgHistory
 			}
 
 			var show_upstream_with_branch = d_settings.get_boolean("show-upstream-with-branch");
+			bool selected_single_local_branch = false;
 
-			foreach (var r in d_main.refs_list.selection)
+			if (!isall && !isheader && refs.size == 1)
+			{
+				foreach (var r in refs)
+				{
+					selected_single_local_branch = r.is_branch();
+				}
+			}
+
+			if (selected_single_local_branch &&
+			    d_settings.get_boolean("show-all-branch-lanes-with-branch"))
+			{
+				foreach (var id in local_branch_permanent_lanes(perm_uniq))
+				{
+					permanent += id;
+				}
+			}
+
+			foreach (var r in refs)
 			{
 				var id = id_for_ref(r);
 

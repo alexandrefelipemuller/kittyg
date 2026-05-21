@@ -71,6 +71,12 @@ private class RefRow : RefTyped, Gtk.ListBoxRow
 	private unowned Gtk.Label d_ahead_behind;
 
 	[GtkChild]
+	private unowned Gtk.Image d_conflict_icon;
+
+	[GtkChild]
+	private unowned Gtk.Label d_conflict_label;
+
+	[GtkChild]
 	private unowned Gtk.Box d_box;
 
 	[GtkChild]
@@ -90,7 +96,9 @@ private class RefRow : RefTyped, Gtk.ListBoxRow
 		get { return reference != null ? reference.parsed_name.rtype : Gitg.RefType.NONE; }
 	}
 
-	public RefRow(Gitg.Ref? reference, RefAnimation animation = RefAnimation.NONE)
+	public RefRow(Gitg.Ref? reference,
+	              bool      has_merge_conflicts = false,
+	              RefAnimation animation = RefAnimation.NONE)
 	{
 		this.reference = reference;
 
@@ -132,6 +140,14 @@ private class RefRow : RefTyped, Gtk.ListBoxRow
 			d_icon.icon_name = "object-select-symbolic";
 			d_icon.show();
 			get_style_context().add_class("current-context");
+
+			if (has_merge_conflicts)
+			{
+				d_conflict_icon.show();
+				d_conflict_label.show();
+				get_style_context().add_class("current-conflict");
+				this.set_tooltip_text(_("%s has unresolved merge conflicts").printf(d_label.label));
+			}
 		}
 
 		if (reference != null)
@@ -1019,7 +1035,7 @@ public class RefsList : Gtk.ListBox
 
 	private RefRow add_ref_row(Gitg.Ref? reference, RefAnimation animation = RefAnimation.NONE)
 	{
-		var row = new RefRow(reference, animation);
+		var row = new RefRow(reference, Gitg.MergeState.head_has_merge_conflicts(d_repository, reference), animation);
 		row.show();
 
 		add(row);

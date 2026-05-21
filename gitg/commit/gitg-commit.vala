@@ -194,6 +194,17 @@ namespace GitgCommit
 			d_update_diff_callback = null;
 		}
 
+		private void prepare_for_commit()
+		{
+			cancel_pending_diff_request();
+
+			if (d_selection_diff_timeout != 0)
+			{
+				Source.remove(d_selection_diff_timeout);
+				d_selection_diff_timeout = 0;
+			}
+		}
+
 		private void schedule_sidebar_selection_changed()
 		{
 			if (d_selection_diff_timeout != 0)
@@ -1378,11 +1389,12 @@ namespace GitgCommit
 
 					application.repository_commits_changed();
 				}
-				catch (Error e)
-				{
-					var msg = _("Failed to commit");
-					application.show_infobar(msg, e.message, Gtk.MessageType.ERROR);
-				}
+			catch (Error e)
+			{
+				var msg = _("Failed to commit");
+				Gitg.Logger.log_commit_failure("commit", e.message);
+				application.show_infobar(msg, e.message, Gtk.MessageType.ERROR);
+			}
 
 				dlg.destroy();
 			});
@@ -1396,6 +1408,7 @@ namespace GitgCommit
 			}
 			catch (Gitg.StageError e)
 			{
+				Gitg.Logger.log_commit_failure("pre-commit", e.message);
 				application.show_infobar(_("Failed to pass pre-commit"),
 				                         e.message,
 				                         Gtk.MessageType.ERROR);
@@ -1499,6 +1512,8 @@ namespace GitgCommit
 				return;
 			}
 
+			prepare_for_commit();
+
 			Ggit.Signature? committer;
 			Ggit.Signature author;
 
@@ -1518,27 +1533,31 @@ namespace GitgCommit
 				author = committer;
 			}
 
-			if (d_main.skip_hooks)
-			{
-				run_commit_dialog(true, author, committer);
-			}
-			else
-			{
-				d_commit_preparing = true;
-				application.busy = true;
+			Idle.add(() => {
+				if (d_main.skip_hooks)
+				{
+					run_commit_dialog(true, author, committer);
+				}
+				else
+				{
+					d_commit_preparing = true;
+					application.busy = true;
 
-				pre_commit.begin(author, (obj, res) => {
-					application.busy = false;
-					d_commit_preparing = false;
+					pre_commit.begin(author, (obj, res) => {
+						application.busy = false;
+						d_commit_preparing = false;
 
-					if (!pre_commit.end(res))
-					{
-						return;
-					}
+						if (!pre_commit.end(res))
+						{
+							return;
+						}
 
-					run_commit_dialog(false, author, committer);
-				});
-			}
+						run_commit_dialog(false, author, committer);
+					});
+				}
+
+				return false;
+			});
 		}
 
 		public void trigger_commit()
