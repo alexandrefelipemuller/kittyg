@@ -200,7 +200,6 @@ namespace GitgHistory
 
 				d_reload_when_mapped.update(() => {
 					reload();
-					((Gtk.ApplicationWindow)application).activate_action("reload", null);
 				}, this);
 			}
 		}
@@ -479,7 +478,10 @@ namespace GitgHistory
 						}
 						catch (Error e)
 						{
-							stderr.printf("Failed to delete %s: %s\n", key, e.message);
+							if (!(e is Ggit.Error.NOTFOUND))
+							{
+								stderr.printf("Failed to delete %s: %s\n", key, e.message);
+							}
 						}
 					}
 				}

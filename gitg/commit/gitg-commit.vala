@@ -1714,6 +1714,28 @@ namespace GitgCommit
 			}
 		}
 
+		private void do_open_containing_folder(Gitg.StageStatusItem item)
+		{
+			var window = (Gtk.Window)d_main.get_toplevel();
+			var root = application.repository.get_workdir();
+			var location = root.get_child(item.path);
+			var parent = location.get_parent();
+
+			if (parent == null)
+			{
+				return;
+			}
+
+			try
+			{
+				Gtk.show_uri_on_window(window, parent.get_uri(), Gdk.CURRENT_TIME);
+			}
+			catch (Error e)
+			{
+				stderr.printf("Failed to open folder for %s: %s\n", item.path, e.message);
+			}
+		}
+
 		private bool do_discard_items(GitgExt.UserQuery q, Gitg.StageStatusItem[] items)
 		{
 			application.busy = true;
@@ -2254,6 +2276,16 @@ namespace GitgCommit
 
 				edit.activate.connect(() => {
 					do_edit_items(sitems);
+				});
+			}
+
+			if (sitems.length == 1)
+			{
+				var open_folder = new Gtk.MenuItem.with_mnemonic(_("Open containing _folder"));
+				menu.append(open_folder);
+
+				open_folder.activate.connect(() => {
+					do_open_containing_folder(sitems[0]);
 				});
 			}
 		}

@@ -907,9 +907,14 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 
 	private void on_reload_activated()
 	{
+		if (d_repository == null)
+		{
+			return;
+		}
+
 		try
 		{
-			set_repository_internal(new Gitg.Repository(this.repository.get_location(), null));
+			set_repository_internal(new Gitg.Repository(d_repository.get_location(), null));
 			update_title();
 		}
 		catch {}

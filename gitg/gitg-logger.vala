@@ -24,9 +24,18 @@ public class Logger : Object
 {
 	private const string LOG_DIRNAME = "logs";
 	private const string LOG_FILENAME = "kittyg.log";
+	private const int64 MAX_LOG_SIZE_BYTES = 1024 * 1024;
+	private const int MAX_LOG_BACKUPS = 4;
+	private const uint HEARTBEAT_INTERVAL_SECONDS = 1;
+	private const int64 ANR_THRESHOLD_USEC = 15 * 1000 * 1000;
+	private const int64 ANR_RECOVERY_USEC = 3 * 1000 * 1000;
 
 	private static bool s_initialized;
 	private static int s_signal_fd = -1;
+	private static Mutex s_lock;
+	private static int64 s_last_main_loop_pulse_usec;
+	private static int64 s_last_anr_started_usec;
+	private static bool s_anr_active;
 
 	public static string log_path
 	{
@@ -37,6 +46,11 @@ public class Logger : Object
 			                           LOG_DIRNAME,
 			                           LOG_FILENAME);
 		}
+	}
+
+	private static string rotated_log_path(int index)
+	{
+		return "%s.%d".printf(log_path, index);
 	}
 
 	private static void ensure_log_directory() throws Error
@@ -74,11 +88,97 @@ public class Logger : Object
 		return "LOG";
 	}
 
-	private static void append_line(string line)
+	private static void close_signal_fd()
+	{
+		if (s_signal_fd != -1)
+		{
+			Posix.close(s_signal_fd);
+			s_signal_fd = -1;
+		}
+	}
+
+	private static void open_signal_fd()
+	{
+		close_signal_fd();
+		s_signal_fd = Posix.open(log_path,
+		                         Posix.O_WRONLY | Posix.O_CREAT | Posix.O_APPEND,
+		                         0644);
+	}
+
+	private static void move_log_file(string source_path, string destination_path) throws Error
+	{
+		var source = File.new_for_path(source_path);
+
+		if (!source.query_exists())
+		{
+			return;
+		}
+
+		var destination = File.new_for_path(destination_path);
+
+		if (destination.query_exists())
+		{
+			destination.delete();
+		}
+
+		source.move(destination, FileCopyFlags.NONE);
+	}
+
+	private static int64 current_log_size() throws Error
+	{
+		var file = File.new_for_path(log_path);
+
+		if (!file.query_exists())
+		{
+			return 0;
+		}
+
+		var info = file.query_info(FileAttribute.STANDARD_SIZE,
+		                          FileQueryInfoFlags.NONE);
+		return (int64)info.get_size();
+	}
+
+	private static void rotate_logs_if_needed(int64 incoming_bytes)
 	{
 		try
 		{
 			ensure_log_directory();
+
+			if (current_log_size() + incoming_bytes <= MAX_LOG_SIZE_BYTES)
+			{
+				return;
+			}
+
+			close_signal_fd();
+
+			var oldest = File.new_for_path(rotated_log_path(MAX_LOG_BACKUPS));
+			if (oldest.query_exists())
+			{
+				oldest.delete();
+			}
+
+			for (var i = MAX_LOG_BACKUPS - 1; i >= 1; i--)
+			{
+				move_log_file(rotated_log_path(i), rotated_log_path(i + 1));
+			}
+
+			move_log_file(log_path, rotated_log_path(1));
+			open_signal_fd();
+		}
+		catch
+		{
+			// Do not emit new log messages from the logger itself.
+		}
+	}
+
+	private static void append_line(string line)
+	{
+		s_lock.lock();
+
+		try
+		{
+			ensure_log_directory();
+			rotate_logs_if_needed((int64)line.length);
 
 			var file = File.new_for_path(log_path);
 			var stream = file.append_to(FileCreateFlags.NONE);
@@ -91,6 +191,10 @@ public class Logger : Object
 		{
 			// Do not emit new log messages from the logger itself.
 		}
+		finally
+		{
+			s_lock.unlock();
+		}
 	}
 
 	private static void append_event(string category, string message)
@@ -100,6 +204,72 @@ public class Logger : Object
 		                                  category,
 		                                  message);
 		append_line(line);
+	}
+
+	private static void note_main_loop_pulse()
+	{
+		s_lock.lock();
+		s_last_main_loop_pulse_usec = GLib.get_monotonic_time();
+		s_lock.unlock();
+	}
+
+	private static void start_main_loop_watchdog()
+	{
+		note_main_loop_pulse();
+
+		Timeout.add_seconds(HEARTBEAT_INTERVAL_SECONDS, () => {
+			note_main_loop_pulse();
+			return Source.CONTINUE;
+		});
+
+		try
+		{
+			new Thread<void *>.try("kittyg-log-watchdog", watchdog_thread);
+		}
+		catch
+		{
+			append_event("WARNING", "Failed to start ANR watchdog thread");
+		}
+	}
+
+	private static void *watchdog_thread()
+	{
+		while (true)
+		{
+			Thread.usleep(HEARTBEAT_INTERVAL_SECONDS * 1000 * 1000);
+
+			var now = GLib.get_monotonic_time();
+			bool log_anr = false;
+			bool log_recovery = false;
+			int64 stalled_usec = 0;
+
+			s_lock.lock();
+			stalled_usec = now - s_last_main_loop_pulse_usec;
+
+			if (!s_anr_active && stalled_usec >= ANR_THRESHOLD_USEC)
+			{
+				s_anr_active = true;
+				s_last_anr_started_usec = s_last_main_loop_pulse_usec;
+				log_anr = true;
+			}
+			else if (s_anr_active && stalled_usec <= ANR_RECOVERY_USEC)
+			{
+				s_anr_active = false;
+				log_recovery = true;
+			}
+			s_lock.unlock();
+
+			if (log_anr)
+			{
+				append_event("ANR",
+				             "Main loop unresponsive for %.1f seconds".printf((double)stalled_usec / 1000000.0));
+			}
+			else if (log_recovery)
+			{
+				append_event("ANR",
+				             "Main loop responsive again after %.1f seconds".printf((double)(now - s_last_anr_started_usec) / 1000000.0));
+			}
+		}
 	}
 
 	private static void on_glib_log(string? log_domain,
@@ -163,9 +333,7 @@ public class Logger : Object
 		try
 		{
 			ensure_log_directory();
-			s_signal_fd = Posix.open(log_path,
-			                         Posix.O_WRONLY | Posix.O_CREAT | Posix.O_APPEND,
-			                         0644);
+			open_signal_fd();
 		}
 		catch
 		{
@@ -198,9 +366,12 @@ public class Logger : Object
 		try
 		{
 			ensure_log_directory();
+			rotate_logs_if_needed(0);
 			GLib.Log.set_default_handler(on_glib_log);
 			install_signal_handlers();
+			start_main_loop_watchdog();
 			append_event("INFO", "kittyg started");
+			append_event("INFO", "Persistent log: %s".printf(log_path));
 		}
 		catch
 		{

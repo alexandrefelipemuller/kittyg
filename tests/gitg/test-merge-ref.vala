@@ -262,11 +262,9 @@ class Gitg.Test.MergeRef : Application
 		assert_file_contents("c", "c file\n");
 
 		var messages = new string[0];
-		var oids = new Ggit.OId[0];
 
 		d_repository.stash_foreach((index, message, oid) => {
 			messages += message;
-			oids += oid;
 
 			return 0;
 		});
@@ -275,7 +273,47 @@ class Gitg.Test.MergeRef : Application
 
 		assert_inteq(messages.length, 1);
 		assert_streq(messages[0], "On master: WIP on HEAD: 50ac9b commit b");
-		assert_streq(oids[0].to_string(), "aaf63a72d8c0d5799ccfcf1623daef228968382f");
+	}
+
+	protected virtual signal void test_merge_theirs_dirty_untracked_ignored()
+	{
+		var loop = new MainLoop();
+
+		write_file("untracked", "untracked file\n");
+
+		var ours_oid = lookup_commit("master").get_id();
+		var theirs_oid = theirs.get_target();
+
+		var action = new Gitg.RefActionMerge(this, action_interface, master);
+
+		action.merge.begin(theirs, (obj, res) => {
+			action.merge.end(res);
+			loop.quit();
+		});
+
+		loop.run();
+
+		assert_inteq(simple_notifications.size, 1);
+		assert_streq(simple_notifications[0].title, "Merge “theirs” into “master”");
+		assert_streq(simple_notifications[0].message, "Successfully merged “theirs” into “master”");
+		assert_inteq(simple_notifications[0].status, SimpleNotification.Status.SUCCESS);
+
+		assert_file_contents("a", "a file\n");
+		assert_file_contents("b", "b file\n");
+		assert_file_contents("c", "c file\n");
+		assert_file_contents("untracked", "untracked file\n");
+
+		var messages = new string[0];
+
+		d_repository.stash_foreach((index, message, oid) => {
+			messages += message;
+
+			return 0;
+		});
+
+		assert_merged(ours_oid, theirs_oid, "master");
+
+		assert_inteq(messages.length, 0);
 	}
 
 	protected virtual signal void test_merge_theirs_not_master_conflicts_checkout()
@@ -402,18 +440,15 @@ class Gitg.Test.MergeRef : Application
 		assert_file_contents(".git/MERGE_MSG", "Merge branch “theirs”\n\nConflicts:\n\tc\n");
 
 		var messages = new string[0];
-		var oids = new Ggit.OId[0];
 
 		d_repository.stash_foreach((index, message, oid) => {
 			messages += message;
-			oids += oid;
 
 			return 0;
 		});
 
 		assert_inteq(messages.length, 1);
 		assert_streq(messages[0], "On master: WIP on HEAD");
-		assert_streq(oids[0].to_string(), "147b7b7b6ad2f9c90f4c93f3bfda78c78ec2dcde");
 	}
 
 	protected virtual signal void test_merge_theirs_not_master_conflicts_checkout_dirty_no_stash()

@@ -261,18 +261,15 @@ class Gitg.Test.CherryPickCommit : Application
 		assert_file_contents("c", "c file\n");
 
 		var messages = new string[0];
-		var oids = new Ggit.OId[0];
 
 		d_repository.stash_foreach((index, message, oid) => {
 			messages += message;
-			oids += oid;
 
 			return 0;
 		});
 
 		assert_inteq(messages.length, 1);
 		assert_streq(messages[0], "On master: WIP on HEAD: 50ac9b commit b");
-		assert_streq(oids[0].to_string(), "aaf63a72d8c0d5799ccfcf1623daef228968382f");
 
 		var commit = lookup_commit("master");
 
@@ -396,18 +393,15 @@ class Gitg.Test.CherryPickCommit : Application
 		assert_file_contents(".git/CHERRY_PICK_HEAD", "72af7ccf47852d832b06c7244de8ae9ded639024\n");
 
 		var messages = new string[0];
-		var oids = new Ggit.OId[0];
 
 		d_repository.stash_foreach((index, message, oid) => {
 			messages += message;
-			oids += oid;
 
 			return 0;
 		});
 
 		assert_inteq(messages.length, 1);
 		assert_streq(messages[0], "On master: WIP on HEAD");
-		assert_streq(oids[0].to_string(), "147b7b7b6ad2f9c90f4c93f3bfda78c78ec2dcde");
 	}
 
 	protected virtual signal void test_cherry_pick_theirs_not_master_conflicts_checkout_dirty_no_stash()

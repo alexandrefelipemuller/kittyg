@@ -35,9 +35,7 @@ public class ActionSupport : Object
 
 	public async bool working_directory_dirty()
 	{
-		var status_opts = Ggit.StatusOption.EXCLUDE_SUBMODULES |
-		                  Ggit.StatusOption.INCLUDE_UNTRACKED |
-		                  Ggit.StatusOption.RECURSE_UNTRACKED_DIRS;
+		var status_opts = Ggit.StatusOption.EXCLUDE_SUBMODULES;
 		var options = new Ggit.StatusOptions(status_opts,
 		                                     Ggit.StatusShow.INDEX_AND_WORKDIR,
 		                                     null);
@@ -90,7 +88,9 @@ public class ActionSupport : Object
 					message = "WIP on HEAD";
 				}
 
-				application.repository.save_stash(committer, message, Ggit.StashFlags.DEFAULT);
+				application.repository.save_stash(committer,
+							          message,
+							          Ggit.StashFlags.DEFAULT | Ggit.StashFlags.INCLUDE_UNTRACKED);
 			});
 		}
 		catch (Error err)
