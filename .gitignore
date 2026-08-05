@@ -3,3 +3,7 @@
 /msysroot/
 /pkgroot/
 /AGENTS.md
+/build/
+/Kittyg.app/
+/Kittyg.dmg
+/osx/scripts/__pycache__/

@@ -1846,7 +1846,7 @@ namespace GitgCommit
 			vars["input-yes"] = _("Ignore");
 			vars["input-text"] = dir;
 
-			var result = Gitg.Utils.run_entry_dialog(application as Gtk.Window, vars);
+			var result = Gitg.UiUtils.run_entry_dialog(application as Gtk.Window, vars);
 
 			if (result == null)
 			{
