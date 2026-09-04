@@ -1761,6 +1761,11 @@ namespace GitgHistory
 		{
 			var c = d_commit_list_model.commit_from_iter(iter);
 
+			if (c == null)
+			{
+				return true;
+			}
+
 			if (c.get_id().has_prefix(key))
 			{
 				return false;

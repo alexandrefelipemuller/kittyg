@@ -2153,6 +2153,47 @@ namespace GitgCommit
 			});
 		}
 
+		private bool items_are_conflicted(Gitg.StageStatusItem[] items)
+		{
+			if (items.length == 0)
+			{
+				return false;
+			}
+
+			foreach (var item in items)
+			{
+				var file = item as Gitg.StageStatusFile;
+
+				if (file == null || (file.flags & Ggit.StatusFlags.CONFLICTED) == 0)
+				{
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		private void launch_external_merge_tool()
+		{
+			try
+			{
+				var action = new Gitg.RefActionLaunchMergeTool(application,
+				                                                null,
+				                                                application.repository.get_head());
+
+				if (action.enabled)
+				{
+					action.activate();
+				}
+			}
+			catch (Error e)
+			{
+				application.show_infobar(_("Failed to launch external merge tool"),
+				                         e.message,
+				                         Gtk.MessageType.ERROR);
+			}
+		}
+
 		private void do_populate_menu(Gtk.Menu menu)
 		{
 			var items = d_main.sidebar.get_selected_items<Gitg.SidebarItem>();
@@ -2195,6 +2236,16 @@ namespace GitgCommit
 			if (type == Sidebar.Item.Type.UNSTAGED)
 			{
 				var discard = new Gtk.MenuItem.with_mnemonic(_("_Discard changes"));
+				if (items_are_conflicted(sitems))
+				{
+					var merge_tool = new Gtk.MenuItem.with_label(_("Launch External Merge Tool"));
+					menu.append(merge_tool);
+
+					merge_tool.activate.connect(() => {
+						launch_external_merge_tool();
+					});
+				}
+
 				discard.sensitive = hasitems;
 
 				menu.append(discard);

@@ -62,7 +62,7 @@ class RefActionLaunchMergeTool : GitgExt.UIElement, GitgExt.Action, GitgExt.RefA
 		get { return Gitg.MergeState.head_has_merge_conflicts(application.repository, reference); }
 	}
 
-	private string? configured_tool_name()
+	private static string? configured_tool_name()
 	{
 		var settings = new Settings(Gitg.Config.APPLICATION_ID + ".preferences.interface");
 
@@ -76,7 +76,7 @@ class RefActionLaunchMergeTool : GitgExt.UIElement, GitgExt.Action, GitgExt.RefA
 		return tool == "" ? null : tool;
 	}
 
-	private async void launch_merge_tool() throws Error
+	public static async void launch_merge_tool(GitgExt.Application application) throws Error
 	{
 		var repo = application.repository;
 		var cwd_file = repo.get_workdir();
@@ -139,7 +139,7 @@ class RefActionLaunchMergeTool : GitgExt.UIElement, GitgExt.Action, GitgExt.RefA
 		notification.message = _("Opening merge tool...");
 		application.notifications.add(notification);
 
-		launch_merge_tool.begin((obj, res) => {
+		launch_merge_tool.begin(application, (obj, res) => {
 			try
 			{
 				launch_merge_tool.end(res);

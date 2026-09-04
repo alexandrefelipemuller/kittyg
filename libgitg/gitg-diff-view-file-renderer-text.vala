@@ -42,6 +42,14 @@ class Gitg.DiffViewFileRendererText : Gtk.SourceView, DiffSelectable, DiffViewFi
 		public int length;
 	}
 
+	// GtkSourceView's syntax highlighting (and the per-token tag copy in
+	// update_highlighting_ready()) becomes pathologically slow on larger
+	// files (multiple minutes and gigabytes of memory for files well under
+	// 100KB), which freezes the UI when loading a diff/status view that
+	// touches such files. Skip highlighting above this size to keep
+	// rendering responsive; small/medium files are unaffected.
+	private const int64 MAX_HIGHLIGHT_FILE_SIZE = 64 * 1024;
+
 	public uint added { get; set; }
 	public uint removed { get; set; }
 
@@ -356,11 +364,18 @@ class Gitg.DiffViewFileRendererText : Gtk.SourceView, DiffSelectable, DiffViewFi
 			var stream = info.new_file_input_stream;
 			info.new_file_input_stream = null;
 
-			buffer = yield init_highlighting_buffer_from_stream(delta.get_new_file(),
-			                                                    get_file_location(file),
-			                                                    stream,
-			                                                    info.new_file_content_type,
-			                                                    cancellable);
+			if (is_too_large_to_highlight(get_file_location(file)))
+			{
+				buffer = null;
+			}
+			else
+			{
+				buffer = yield init_highlighting_buffer_from_stream(delta.get_new_file(),
+				                                                    get_file_location(file),
+				                                                    stream,
+				                                                    info.new_file_content_type,
+				                                                    cancellable);
+			}
 		}
 		else
 		{
@@ -373,6 +388,24 @@ class Gitg.DiffViewFileRendererText : Gtk.SourceView, DiffSelectable, DiffViewFi
 			d_new_highlight_ready = true;
 
 			update_highlighting_ready();
+		}
+	}
+
+	private bool is_too_large_to_highlight(File? location)
+	{
+		if (location == null)
+		{
+			return false;
+		}
+
+		try
+		{
+			var info = location.query_info(FileAttribute.STANDARD_SIZE, FileQueryInfoFlags.NONE);
+			return info.get_size() > MAX_HIGHLIGHT_FILE_SIZE;
+		}
+		catch
+		{
+			return false;
 		}
 	}
 
@@ -421,6 +454,11 @@ class Gitg.DiffViewFileRendererText : Gtk.SourceView, DiffSelectable, DiffViewFi
 			{
 				return null;
 			}
+		}
+
+		if (content.length > MAX_HIGHLIGHT_FILE_SIZE)
+		{
+			return null;
 		}
 
 		bool uncertain;

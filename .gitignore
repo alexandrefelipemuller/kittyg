@@ -2,4 +2,7 @@
 /.venv/
 /msysroot/
 /pkgroot/
+/pkg-deb/
+/pkg-deb-stage/
+/*.deb
 /AGENTS.md
