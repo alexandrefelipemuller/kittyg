@@ -28,19 +28,6 @@ public class PluginsEngine : Peas.Engine
 	{
 		enable_loader("python");
 
-		var repo = Introspection.Repository.get_default();
-
-		try
-		{
-			repo.require("Peas", "1.0", 0);
-			repo.require("PeasGtk", "1.0", 0);
-		}
-		catch (Error e)
-		{
-			warning("Could not load repository: %s", e.message);
-			return;
-		}
-
 		add_search_path(Dirs.user_plugins_dir,
 		                Dirs.user_plugins_data_dir);
 

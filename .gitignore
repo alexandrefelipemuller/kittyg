@@ -6,3 +6,7 @@
 /pkg-deb-stage/
 /*.deb
 /AGENTS.md
+/build/
+/Kittyg.app/
+/Kittyg.dmg
+/osx/scripts/__pycache__/
