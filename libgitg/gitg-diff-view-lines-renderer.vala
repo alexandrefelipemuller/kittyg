@@ -193,7 +193,7 @@ class Gitg.DiffViewLinesRenderer : Gtk.SourceGutterRendererText
 		}
 
 		d_num_digits = num_digits;
-		d_num_digits_fill = string.nfill(num_digits, ' ');
+		d_num_digits_fill = string.nfill(num_digits, '0');
 	}
 
 	private Line_Style get_origin(int buffer_line, Gtk.SourceBuffer buffer)
