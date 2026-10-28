@@ -17,6 +17,8 @@
  * along with gitg. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <config.h>
+
 #include "gitg-platform-support.h"
 
 #include <gio/gwin32inputstream.h>
@@ -86,7 +88,7 @@ gitg_platform_support_get_lib_dir (void)
 	gchar *lib_dir;
 
 	module_dir = g_win32_get_package_installation_directory_of_module (NULL);
-	lib_dir = g_build_filename (module_dir, "lib", "gitg", NULL);
+	lib_dir = g_build_filename (module_dir, "lib", PACKAGE_NAME, NULL);
 	g_free (module_dir);
 
 	return lib_dir;
@@ -112,7 +114,7 @@ gitg_platform_support_get_data_dir (void)
 	gchar *data_dir;
 
 	module_dir = g_win32_get_package_installation_directory_of_module (NULL);
-	data_dir = g_build_filename (module_dir, "share", "gitg", NULL);
+	data_dir = g_build_filename (module_dir, "share", PACKAGE_NAME, NULL);
 	g_free (module_dir);
 
 	return data_dir;
