@@ -30,6 +30,15 @@ public class PreferencesGeneral : Gtk.Grid, GitgExt.Preferences
 	private unowned Gtk.CheckButton d_smart_push;
 	[GtkChild (name = "git_client")]
 	private unowned Gtk.ComboBoxText d_git_client;
+	[GtkChild (name = "author_name")]
+	private unowned Gtk.Entry d_author_name;
+	[GtkChild (name = "author_email")]
+	private unowned Gtk.Entry d_author_email;
+
+	private const string USER_NAME_PROP = "user.name";
+	private const string USER_EMAIL_PROP = "user.email";
+
+	private Ggit.Config? d_global_config;
 
 	construct
 	{
@@ -44,6 +53,78 @@ public class PreferencesGeneral : Gtk.Grid, GitgExt.Preferences
 		              d_git_client,
 		              "active-id",
 		              SettingsBindFlags.GET | SettingsBindFlags.SET);
+
+		load_author();
+	}
+
+	private void load_author()
+	{
+		try
+		{
+			d_global_config = new Ggit.Config.default();
+		}
+		catch (Error e)
+		{
+			warning("Error while loading config file: %s", e.message);
+			d_author_name.sensitive = false;
+			d_author_email.sensitive = false;
+			return;
+		}
+
+		d_author_name.text = read_global(USER_NAME_PROP);
+		d_author_email.text = read_global(USER_EMAIL_PROP);
+
+		d_author_name.activate.connect(() => { save_author(USER_NAME_PROP, d_author_name); });
+		d_author_name.focus_out_event.connect(() => {
+			save_author(USER_NAME_PROP, d_author_name);
+			return false;
+		});
+
+		d_author_email.activate.connect(() => { save_author(USER_EMAIL_PROP, d_author_email); });
+		d_author_email.focus_out_event.connect(() => {
+			save_author(USER_EMAIL_PROP, d_author_email);
+			return false;
+		});
+	}
+
+	private string read_global(string name)
+	{
+		try
+		{
+			var value = d_global_config.snapshot().get_string(name);
+
+			return value != null ? value.strip() : "";
+		}
+		catch
+		{
+			return "";
+		}
+	}
+
+	private void save_author(string name, Gtk.Entry entry)
+	{
+		var value = entry.text.strip();
+
+		if (value == read_global(name))
+		{
+			return;
+		}
+
+		try
+		{
+			if (value == "")
+			{
+				d_global_config.delete_entry(name);
+			}
+			else
+			{
+				d_global_config.set_string(name, value);
+			}
+		}
+		catch (Error e)
+		{
+			warning("Failed to set %s in git config: %s", name, e.message);
+		}
 	}
 
 	public Gtk.Widget widget
