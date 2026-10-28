@@ -1701,38 +1701,54 @@ namespace GitgCommit
 
 			foreach (var item in items)
 			{
-				var file = root.get_child(item.path);
-
 				try
 				{
-					Gtk.show_uri_on_window(window, file.get_uri(), Gdk.CURRENT_TIME);
+					Gitg.ExternalOpen.open(window, root.get_child(item.path));
 				}
 				catch (Error e)
 				{
-					stderr.printf("Failed to launch application for %s: %s\n", item.path, e.message);
+					application.show_infobar(_("Failed to open file"),
+					                         e.message,
+					                         Gtk.MessageType.ERROR);
 				}
 			}
 		}
 
-		private void do_open_containing_folder(Gitg.StageStatusItem item)
+		private void do_show_in_file_manager(Gitg.StageStatusItem item)
 		{
 			var window = (Gtk.Window)d_main.get_toplevel();
-			var root = application.repository.get_workdir();
-			var location = root.get_child(item.path);
-			var parent = location.get_parent();
+			var location = application.repository.get_workdir().get_child(item.path);
 
-			if (parent == null)
+			try
 			{
-				return;
+				Gitg.ExternalOpen.show_in_file_manager(window, location);
+			}
+			catch (Error e)
+			{
+				application.show_infobar(_("Failed to show file in file manager"),
+				                         e.message,
+				                         Gtk.MessageType.ERROR);
+			}
+		}
+
+		private void do_open_terminal(Gitg.StageStatusItem item)
+		{
+			var folder = application.repository.get_workdir().get_child(item.path).get_parent();
+
+			if (folder == null)
+			{
+				folder = application.repository.get_workdir();
 			}
 
 			try
 			{
-				Gtk.show_uri_on_window(window, parent.get_uri(), Gdk.CURRENT_TIME);
+				Gitg.ExternalOpen.open_terminal(folder);
 			}
 			catch (Error e)
 			{
-				stderr.printf("Failed to open folder for %s: %s\n", item.path, e.message);
+				application.show_infobar(_("Failed to open terminal"),
+				                         e.message,
+				                         Gtk.MessageType.ERROR);
 			}
 		}
 
@@ -2322,7 +2338,7 @@ namespace GitgCommit
 
 			if (canedit)
 			{
-				var edit = new Gtk.MenuItem.with_mnemonic(_("_Edit file"));
+				var edit = new Gtk.MenuItem.with_mnemonic(_("_Open file"));
 				menu.append(edit);
 
 				edit.activate.connect(() => {
@@ -2332,11 +2348,18 @@ namespace GitgCommit
 
 			if (sitems.length == 1)
 			{
-				var open_folder = new Gtk.MenuItem.with_mnemonic(_("Open containing _folder"));
-				menu.append(open_folder);
+				var show_file = new Gtk.MenuItem.with_mnemonic(_("_Show in file manager"));
+				menu.append(show_file);
 
-				open_folder.activate.connect(() => {
-					do_open_containing_folder(sitems[0]);
+				show_file.activate.connect(() => {
+					do_show_in_file_manager(sitems[0]);
+				});
+
+				var terminal = new Gtk.MenuItem.with_mnemonic(_("Open in _terminal"));
+				menu.append(terminal);
+
+				terminal.activate.connect(() => {
+					do_open_terminal(sitems[0]);
 				});
 			}
 		}

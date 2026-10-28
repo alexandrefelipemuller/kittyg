@@ -173,7 +173,8 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 		{"author-details-repo", on_repo_author_details_activated},
 		{"preferences", on_preferences_activated},
 		{"select", on_select_activated, null, "false", null},
-		{"open-externally", on_open_externally}
+		{"open-externally", on_open_externally},
+		{"open-terminal", on_open_terminal}
 	};
 
 #if GTK_SHORTCUTS_WINDOW
@@ -223,6 +224,7 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 		chooser.extra_widget = scan_all;
 
 		chooser.modal = true;
+		chooser.set_default_size(700, 450);
 		chooser.set_default_response(Gtk.ResponseType.OK);
 
 		chooser.response.connect((c, id) => {
@@ -885,6 +887,7 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 		                                         _("_Open"), Gtk.ResponseType.OK);
 
 		chooser.modal = true;
+		chooser.set_default_size(700, 450);
 
 		chooser.response.connect((c, id) => {
 			if (id == Gtk.ResponseType.OK)
@@ -1465,14 +1468,28 @@ public class Window : Gtk.ApplicationWindow, GitgExt.Application, Initable
 	{
 		if (d_repository != null)
 		{
-			var uri = d_repository.get_workdir().get_uri();
 			try
 			{
-				GLib.AppInfo.launch_default_for_uri (uri, null);
+				Gitg.ExternalOpen.show_in_file_manager(this, d_repository.get_workdir());
 			}
-			catch(Error e)
+			catch (Error e)
 			{
-				warning ("Cannot open %s: %s", uri, e.message);
+				warning ("Cannot open %s: %s", d_repository.get_workdir().get_path(), e.message);
+			}
+		}
+	}
+
+	private void on_open_terminal()
+	{
+		if (d_repository != null)
+		{
+			try
+			{
+				Gitg.ExternalOpen.open_terminal(d_repository.get_workdir());
+			}
+			catch (Error e)
+			{
+				warning ("Cannot open terminal: %s", e.message);
 			}
 		}
 	}

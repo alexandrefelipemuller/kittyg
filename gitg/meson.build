@@ -42,6 +42,7 @@ sources = gitg_sources + files(
   'gitg-checkout-remote-branch-dialog.vala',
   'gitg-dash-view.vala',
   'gitg-dirs.vala',
+  'gitg-external-open.vala',
   'gitg-git-environment.vala',
   'gitg-logger.vala',
   'gitg-edit-remote-action.vala',
