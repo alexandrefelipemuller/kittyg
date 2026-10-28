@@ -632,7 +632,8 @@ public class Stage : Object
 		yield thread_index((index) => {
 			// get path relative to the repository working directory
 			var wd = d_repository.get_workdir();
-			var path = wd.get_relative_path(file);
+			// git always uses forward slashes, even on Windows
+			var path = wd.get_relative_path(file).replace("\\", "/");
 
 			// get the tree entry of that file
 			var entry = tree.get_by_path(path);
@@ -968,7 +969,8 @@ public class Stage : Object
 		yield thread_index((index) => {
 			// get path relative to the repository working directory
 			var wd = d_repository.get_workdir();
-			var path = wd.get_relative_path(file);
+			// git always uses forward slashes, even on Windows
+			var path = wd.get_relative_path(file).replace("\\", "/");
 
 			// get the tree entry of that file
 			var entry = tree.get_by_path(path);
