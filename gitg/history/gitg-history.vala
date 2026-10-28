@@ -869,7 +869,7 @@ namespace GitgHistory
 			return stash_message;
 		}
 
-		private async void stash_uncommitted_changes()
+		private async void stash_uncommitted_changes(bool staged_only = false)
 		{
 			var committer = application.get_verified_committer();
 
@@ -887,9 +887,16 @@ namespace GitgHistory
 
 			try
 			{
-				yield Gitg.Async.thread(() => {
-					application.repository.save_stash(committer, message, Ggit.StashFlags.DEFAULT);
-				});
+				if (staged_only)
+				{
+					yield stash_staged_changes(message);
+				}
+				else
+				{
+					yield Gitg.Async.thread(() => {
+						application.repository.save_stash(committer, message, Ggit.StashFlags.DEFAULT);
+					});
+				}
 			}
 			catch (Error err)
 			{
@@ -900,6 +907,28 @@ namespace GitgHistory
 			}
 
 			application.repository_commits_changed();
+		}
+
+		// libgit2 cannot stash only the index, so use the git client (2.35+)
+		private async void stash_staged_changes(string message) throws Error
+		{
+			var workdir = application.repository.get_workdir();
+
+			var proc = new Subprocess(SubprocessFlags.STDOUT_PIPE | SubprocessFlags.STDERR_MERGE,
+			                          "git",
+			                          "-C", workdir.get_path(),
+			                          "stash", "push", "--staged",
+			                          "-m", message);
+
+			string? output = null;
+			yield proc.communicate_utf8_async(null, null, out output, null);
+
+			if (!proc.get_successful())
+			{
+				throw new IOError.FAILED(output != null && output.strip() != ""
+				                         ? output.strip()
+				                         : _("git stash push --staged failed (requires git 2.35 or newer)"));
+			}
 		}
 
 		private async void discard_uncommitted_changes(GitgExt.UserQuery q)
@@ -1043,6 +1072,14 @@ namespace GitgHistory
 			item.show();
 			item.activate.connect(() => {
 				stash_uncommitted_changes.begin();
+			});
+
+			menu.append(item);
+
+			item = new Gtk.MenuItem.with_mnemonic(_("Stash _staged changes"));
+			item.show();
+			item.activate.connect(() => {
+				stash_uncommitted_changes.begin(true);
 			});
 
 			menu.append(item);
