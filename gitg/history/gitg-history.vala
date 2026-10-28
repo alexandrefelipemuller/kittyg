@@ -885,6 +885,11 @@ namespace GitgHistory
 				return;
 			}
 
+			var notification = new Gitg.SimpleNotification(_("Stash changes"));
+			notification.message = _("Stashing changes...");
+			application.notifications.add(notification);
+			application.busy = true;
+
 			try
 			{
 				if (staged_only)
@@ -900,12 +905,13 @@ namespace GitgHistory
 			}
 			catch (Error err)
 			{
-				application.show_infobar(_("Failed to stash changes"),
-				                         err.message,
-				                         Gtk.MessageType.ERROR);
+				application.busy = false;
+				notification.error(_("Failed to stash changes: %s").printf(err.message));
 				return;
 			}
 
+			application.busy = false;
+			notification.success(_("Changes stashed"));
 			application.repository_commits_changed();
 		}
 
@@ -947,6 +953,10 @@ namespace GitgHistory
 			var cwd = cwd_file.get_path();
 			application.busy = true;
 			var success = false;
+
+			var notification = new Gitg.SimpleNotification(_("Discard changes"));
+			notification.message = _("Discarding changes...");
+			application.notifications.add(notification);
 
 			try
 			{
@@ -1019,9 +1029,12 @@ namespace GitgHistory
 			}
 			catch (Error err)
 			{
-				application.show_infobar(_("Failed to discard changes"),
-				                         err.message,
-				                         Gtk.MessageType.ERROR);
+				notification.error(_("Failed to discard changes: %s").printf(err.message));
+			}
+
+			if (success)
+			{
+				notification.success(_("Changes discarded"));
 			}
 
 			q.quit();

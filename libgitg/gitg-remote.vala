@@ -503,12 +503,14 @@ public class Remote : Ggit.Remote
 		var envp = Environ.get();
 		var askpass_script = ensure_askpass_script();
 
+		// Never let git block waiting for a terminal prompt nobody can answer
+		envp = Environ.set_variable((owned) envp, "GIT_TERMINAL_PROMPT", "0", true);
+
 		if (askpass_script != null && askpass_script != "")
 		{
 			envp = Environ.set_variable((owned) envp, "GIT_ASKPASS", askpass_script, true);
 			envp = Environ.set_variable((owned) envp, "SSH_ASKPASS", askpass_script, true);
 			envp = Environ.set_variable((owned) envp, "SSH_ASKPASS_REQUIRE", "force", true);
-			envp = Environ.set_variable((owned) envp, "GIT_TERMINAL_PROMPT", "0", true);
 		}
 
 		return envp;
